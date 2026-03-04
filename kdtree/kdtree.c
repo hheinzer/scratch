@@ -18,7 +18,7 @@ typedef struct {
         } leaf;
         struct {
             int left, right;  // child node indices
-        } inner;
+        } node;
     } child;
 } Node;
 
@@ -82,7 +82,7 @@ static void swap_int(int *lhs, int *rhs)
     *rhs = swap;
 }
 
-static void nth_element(Kdtree *self, int beg, int end, int mid, int dim)
+static void quickselect(Kdtree *self, int beg, int end, int mid, int dim)
 {
     int min = beg;
     int max = end - 1;
@@ -129,15 +129,15 @@ static void build(Kdtree *self, int *next, int beg, int end)
 
     int mid = (beg + end) / 2;
     int dim = split_dim(self, beg, end);
-    nth_element(self, beg, end, mid, dim);
+    quickselect(self, beg, end, mid, dim);
 
     self->node[idx].dim = dim;
     self->node[idx].value = get_value(self, mid, dim);
 
-    self->node[idx].child.inner.left = *next;
+    self->node[idx].child.node.left = *next;
     build(self, next, beg, mid);
 
-    self->node[idx].child.inner.right = *next;
+    self->node[idx].child.node.right = *next;
     build(self, next, mid, end);
 }
 
@@ -277,14 +277,14 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
     double *farther_limit;
 
     if (query_val <= split_val) {
-        closer_child = node->child.inner.left;
-        farther_child = node->child.inner.right;
+        closer_child = node->child.node.left;
+        farther_child = node->child.node.right;
         closer_limit = &self->rect[split].max;
         farther_limit = &self->rect[split].min;
     }
     else {
-        closer_child = node->child.inner.right;
-        farther_child = node->child.inner.left;
+        closer_child = node->child.node.right;
+        farther_child = node->child.node.left;
         closer_limit = &self->rect[split].min;
         farther_limit = &self->rect[split].max;
     }
@@ -302,16 +302,18 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
     *farther_limit = farther_prev;
 }
 
-void kdtree_query(const Kdtree *self, const double *point, int *index, double *distance, int num_)
+int kdtree_query(const Kdtree *self, const double *point, int *index, double *distance, int cap)
 {
-    assert(self && point && index && distance && num_ > 0);
+    assert(self && point && index && distance && cap > 0);
 
     for (int i = 0; i < self->dim; i++) {
         self->rect[i].min = -DBL_MAX;
         self->rect[i].max = DBL_MAX;
     }
 
-    int cap = (num_ < self->num) ? num_ : self->num;
+    if (self->num < cap) {
+        cap = self->num;
+    }
 
     int num = 0;
     search(self, 0, point, index, distance, &num, cap);
@@ -334,8 +336,5 @@ void kdtree_query(const Kdtree *self, const double *point, int *index, double *d
         distance[i] = sqrt(distance[i]);
     }
 
-    for (int i = num; i < num_; i++) {
-        index[i] = -1;
-        distance[i] = INFINITY;
-    }
+    return num;
 }

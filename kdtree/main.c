@@ -38,8 +38,8 @@ int main(int argc, char **argv)
     for (int i = 0; i < num_queries; i++) {
         int index[num_neighbors];
         double distance[num_neighbors];
-        kdtree_query(tree, point[query[i]], index, distance, num_neighbors);
-        assert(index[0] == query[i] && distance[0] <= DBL_EPSILON);
+        int num = kdtree_query(tree, point[query[i]], index, distance, num_neighbors);
+        assert(num == num_neighbors && index[0] == query[i] && distance[0] <= DBL_EPSILON);
     }
     clock_t end_query = clock();
 
