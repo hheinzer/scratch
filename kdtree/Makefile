@@ -11,7 +11,7 @@ CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 # profile
 #CFLAGS += -fno-omit-frame-pointer -fno-inline-functions
 
-main: main.c kdtree.c kdtree.h alloc.h
+main: main.c kdtree.c kdtree.h
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
 
 clean:

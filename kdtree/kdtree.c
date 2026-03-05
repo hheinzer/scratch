@@ -5,8 +5,6 @@
 #include <math.h>
 #include <stdlib.h>
 
-#include "alloc.h"
-
 enum { LEAF_SIZE = 10 };
 
 typedef struct {
@@ -145,26 +143,30 @@ Kdtree *kdtree_init(const double *point, int dim, int num, int leaf_size)
 {
     assert(point && dim > 0 && num > 0 && leaf_size >= 0);
 
-    Kdtree *self = alloc(1, sizeof(*self));
+    Kdtree *self = malloc(sizeof(*self));
+    assert(self);
 
     self->dim = dim;
     self->num = num;
     self->leaf_size = leaf_size ? leaf_size : LEAF_SIZE;
     self->point = point;
 
-    self->index = alloc(num, sizeof(*self->index));
+    self->index = malloc((size_t)num * sizeof(*self->index));
+    assert(self->index);
     for (int i = 0; i < num; i++) {
         self->index[i] = i;
     }
 
     int size = compute_size(self, num);
-    self->node = alloc(size, sizeof(*self->node));
+    self->node = malloc((size_t)size * sizeof(*self->node));
+    assert(self->node);
 
     int next = 0;
     build(self, &next, 0, num);
     assert(next == size);
 
-    self->rect = alloc(dim, sizeof(*self->rect));
+    self->rect = malloc((size_t)dim * sizeof(*self->rect));
+    assert(self->rect);
 
     return self;
 }

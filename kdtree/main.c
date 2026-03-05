@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "alloc.h"
 #include "kdtree.h"
 
 int main(int argc, char **argv)
@@ -18,14 +17,16 @@ int main(int argc, char **argv)
     int num_queries = (argc > 4) ? (int)strtol(argv[4], 0, 10) : 1000;
     int num_neighbors = (argc > 5) ? (int)strtol(argv[5], 0, 10) : 1;
 
-    double (*point)[dim] = alloc(num_points, sizeof(*point));
+    double (*point)[dim] = malloc((size_t)num_points * sizeof(*point));
+    assert(point);
     for (int i = 0; i < num_points; i++) {
         for (int j = 0; j < dim; j++) {
             point[i][j] = (2 * (rand() / (double)RAND_MAX)) - 1;
         }
     }
 
-    int *query = alloc(num_queries, sizeof(*query));
+    int *query = malloc((size_t)num_queries * sizeof(*query));
+    assert(query);
     for (int i = 0; i < num_queries; i++) {
         query[i] = rand() % num_points;
     }
