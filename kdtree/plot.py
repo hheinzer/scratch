@@ -58,11 +58,8 @@ def main():
 
     ax.scatter(points[:, 0], points[:, 1], s=1, c="purple")
 
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-
     fig.tight_layout()
-    plt.savefig("plot.pdf")
+    plt.show()
 
 
 if __name__ == "__main__":
