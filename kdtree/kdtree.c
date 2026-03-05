@@ -318,20 +318,6 @@ int kdtree_query(const Kdtree *self, const double *point, int *index, double *di
     int num = 0;
     search(self, 0, point, index, distance, &num, cap);
 
-    // sort results ascending by distance
-    for (int i = 1; i < num; i++) {
-        int idx = index[i];
-        double dist2 = distance[i];
-        int cur = i - 1;
-        while (cur >= 0 && distance[cur] > dist2) {
-            index[cur + 1] = index[cur];
-            distance[cur + 1] = distance[cur];
-            cur -= 1;
-        }
-        index[cur + 1] = idx;
-        distance[cur + 1] = dist2;
-    }
-
     for (int i = 0; i < num; i++) {
         distance[i] = sqrt(distance[i]);
     }
