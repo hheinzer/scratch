@@ -4,31 +4,40 @@ from scipy.spatial import KDTree as ScipyKDTree
 from kdtree import KDTree
 
 
-def test_nearest(tree, ref, queries, num):
+def test_nearest(tree, tree_ref, queries, num):
     print(f"{"nearest":10s}", end=" ")
     for q in queries:
         idx, dist = tree.nearest(q, num)
-        dist_ref, idx_ref = ref.query(q, num)
+        dist_ref, idx_ref = tree_ref.query(q, num)
         idx_ref = idx_ref.astype(np.intc)
         assert np.array_equal(idx, idx_ref), "index mismatch"
         assert np.allclose(dist, dist_ref), "distance mismatch"
     print("ok")
 
 
-def test_radius(tree, ref, queries, radius):
+def test_radius(tree, tree_ref, queries, radius):
     print(f"{"radius":10s}", end=" ")
     for q in queries:
         idx, dist = tree.radius(q, radius, sorted=True)
-        idx_ref = ref.query_ball_point(q, radius)
+        idx_ref = tree_ref.query_ball_point(q, radius)
         assert set(idx.tolist()) == set(idx_ref), "index mismatch"
         assert np.all(dist[:-1] <= dist[1:]), "not sorted"
     print("ok")
 
 
-def test_pairs(tree, ref, radius):
+def test_pairs(tree, tree_ref, radius):
     print(f"{"pairs":10s}", end=" ")
     pair = tree.pairs(radius)
-    pair_ref = ref.query_pairs(radius)
+    pair_ref = tree_ref.query_pairs(radius)
+    assert pair == pair_ref, "pair mismatch"
+    print("ok")
+
+
+def test_cross(tree, tree_ref, other, other_ref, radius):
+    print(f"{"cross":10s}", end=" ")
+    pair = tree.cross(other, radius)
+    list_ref = tree_ref.query_ball_tree(other_ref, radius)
+    pair_ref = {(i, j) for i, js in enumerate(list_ref) for j in js}
     assert pair == pair_ref, "pair mismatch"
     print("ok")
 
@@ -47,11 +56,15 @@ def main():
     queries = rng.uniform(-1, 1, (num_queries, dim))
 
     tree = KDTree(points, leaf_size)
-    ref = ScipyKDTree(points, leaf_size)
+    tree_ref = ScipyKDTree(points, leaf_size)
 
-    test_nearest(tree, ref, queries, num)
-    test_radius(tree, ref, queries, radius)
-    test_pairs(tree, ref, radius)
+    other = KDTree(queries, leaf_size)
+    other_ref = ScipyKDTree(queries, leaf_size)
+
+    test_nearest(tree, tree_ref, queries, num)
+    test_radius(tree, tree_ref, queries, radius)
+    test_pairs(tree, tree_ref, radius)
+    test_cross(tree, tree_ref, other, other_ref, radius)
 
 
 if __name__ == "__main__":

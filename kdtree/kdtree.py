@@ -31,6 +31,9 @@ _lib.kdtree_radius.argtypes = [_void_p, _f64_np, _f64, _int_np, _f64_np, _int, _
 _lib.kdtree_pairs.restype = _int
 _lib.kdtree_pairs.argtypes = [_void_p, _f64, _int2_pp]
 
+_lib.kdtree_cross.restype = _int
+_lib.kdtree_cross.argtypes = [_void_p, _void_p, _f64, _int2_pp]
+
 _libc = ctypes.CDLL(None)
 _libc.free.argtypes = [_void_p]
 _libc.free.restype = None
@@ -69,6 +72,13 @@ class KDTree:
     def pairs(self, radius):
         pairs_p = _int2_p()
         total = _lib.kdtree_pairs(self._ptr, radius, ctypes.byref(pairs_p))
+        result = {(pairs_p[i][0], pairs_p[i][1]) for i in range(total)}
+        _libc.free(ctypes.cast(pairs_p, ctypes.c_void_p))
+        return result
+
+    def cross(self, other, radius):
+        pairs_p = _int2_p()
+        total = _lib.kdtree_cross(self._ptr, other._ptr, radius, ctypes.byref(pairs_p))
         result = {(pairs_p[i][0], pairs_p[i][1]) for i in range(total)}
         _libc.free(ctypes.cast(pairs_p, ctypes.c_void_p))
         return result

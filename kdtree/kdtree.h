@@ -19,5 +19,9 @@ int kdtree_radius(const Kdtree *self, const double *point, double radius, int *i
                   double *distance, int cap, int sorted);
 
 // Find all pairs of points within `radius` of each other using a dual-tree traversal. Unique pairs
-// are written to `*pair` as int[2] elements. Caller must free. Returns the total number of pairs.
+// are written to `*pair`. Caller must free. Returns total pair count.
 int kdtree_pairs(const Kdtree *self, double radius, int (**pair)[2]);
+
+// Find all pairs (self, other) within `radius` using a dual-tree traversal. Both trees must have
+// the same dimension. Pairs are written to `*pair`. Caller must free. Returns total pair count.
+int kdtree_cross(const Kdtree *self, const Kdtree *other, double radius, int (**pair)[2]);

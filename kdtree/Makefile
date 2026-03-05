@@ -16,7 +16,7 @@ CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 all: main libkdtree.so
 
 clean:
-	@rm -rf main libkdtree.so __pycache__
+	@rm -rf main libkdtree.so
 
 main: main.c kdtree.c kdtree.h
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
