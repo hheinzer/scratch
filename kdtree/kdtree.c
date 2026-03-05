@@ -4,7 +4,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-enum { LEAF_SIZE = 10, HEAP_THRESHOLD = 32 };
+enum { LEAF_SIZE = 16, HEAP_THRESHOLD = 32 };
 
 typedef struct {
     int num;       // number of points in subtree
