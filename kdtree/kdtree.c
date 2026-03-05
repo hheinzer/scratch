@@ -178,59 +178,22 @@ void kdtree_deinit(Kdtree *self)
     free(self);
 }
 
-static void swap_double(double *lhs, double *rhs)
+static void sorted_push(int *index, double *distance2, int *num, int cap, int idx, double dist2)
 {
-    double swap = *lhs;
-    *lhs = *rhs;
-    *rhs = swap;
-}
-
-static void heap_sift_down(int *index, double *distance2, int num, int pos)
-{
-    while (1) {
-        int largest = pos;
-        int left = (2 * pos) + 1;
-        int right = (2 * pos) + 2;
-        if (left < num && distance2[left] > distance2[largest]) {
-            largest = left;
-        }
-        if (right < num && distance2[right] > distance2[largest]) {
-            largest = right;
-        }
-        if (largest == pos) {
-            break;
-        }
-        swap_int(&index[pos], &index[largest]);
-        swap_double(&distance2[pos], &distance2[largest]);
-        pos = largest;
+    if (*num == cap && dist2 >= distance2[cap - 1]) {
+        return;
     }
-}
-
-static void heap_sift_up(int *index, double *distance2, int pos)
-{
-    while (pos > 0) {
-        int parent = (pos - 1) / 2;
-        if (distance2[pos] <= distance2[parent]) {
-            break;
-        }
-        swap_int(&index[pos], &index[parent]);
-        swap_double(&distance2[pos], &distance2[parent]);
-        pos = parent;
+    int end = (*num < cap) ? *num : cap - 1;
+    int pos = end;
+    while (pos > 0 && distance2[pos - 1] > dist2) {
+        index[pos] = index[pos - 1];
+        distance2[pos] = distance2[pos - 1];
+        pos -= 1;
     }
-}
-
-static void heap_push(int *index, double *distance2, int *num, int cap, int idx, double dist2)
-{
+    index[pos] = idx;
+    distance2[pos] = dist2;
     if (*num < cap) {
-        index[*num] = idx;
-        distance2[*num] = dist2;
         *num += 1;
-        heap_sift_up(index, distance2, *num - 1);
-    }
-    else if (dist2 < distance2[0]) {
-        index[0] = idx;
-        distance2[0] = dist2;
-        heap_sift_down(index, distance2, *num, 0);
     }
 }
 
@@ -262,7 +225,7 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
                 double diff = point[j] - get_value(self, i, j);
                 dist2 += diff * diff;
             }
-            heap_push(index, distance2, num, cap, self->index[i], dist2);
+            sorted_push(index, distance2, num, cap, self->index[i], dist2);
         }
         return;
     }
@@ -296,7 +259,7 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
 
     double farther_prev = *farther_limit;
     *farther_limit = split_val;
-    if (*num < cap || rect_dist2(self, point) <= distance2[0]) {
+    if (*num < cap || rect_dist2(self, point) <= distance2[cap - 1]) {
         search(self, farther_child, point, index, distance2, num, cap);
     }
     *farther_limit = farther_prev;

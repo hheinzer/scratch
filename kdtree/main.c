@@ -5,16 +5,6 @@
 
 #include "kdtree.h"
 
-static int contains(const int *index, int idx, int num)
-{
-    for (int i = 0; i < num; i++) {
-        if (index[i] == idx) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 int main(int argc, char **argv)
 {
     srand((unsigned)time(0));
@@ -48,7 +38,7 @@ int main(int argc, char **argv)
         int index[num_neighbors];
         double distance[num_neighbors];
         int num = kdtree_query(tree, point[query[i]], index, distance, num_neighbors);
-        assert(num == num_neighbors && contains(index, query[i], num_neighbors));
+        assert(num == num_neighbors && index[0] == query[i]);
     }
     clock_t end_query = clock();
 
