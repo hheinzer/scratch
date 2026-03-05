@@ -6,7 +6,7 @@ CFLAGS = -std=c99 -g3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion
 CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 
 # release
-#CFLAGS += -O3 -march=native -flto=auto -DNDEBUG
+#CFLAGS += -O3 -march=native -flto=auto -DNDEBUG -Wno-unused
 
 # profile
 #CFLAGS += -fno-omit-frame-pointer -fno-inline-functions

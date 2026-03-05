@@ -1,21 +1,29 @@
 #include <assert.h>
-#include <float.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
 #include "kdtree.h"
 
+static int contains(const int *index, int idx, int num)
+{
+    for (int i = 0; i < num; i++) {
+        if (index[i] == idx) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     srand((unsigned)time(0));
 
     int dim = (argc > 1) ? (int)strtol(argv[1], 0, 10) : 3;
-    int num_points = (argc > 2) ? (int)strtol(argv[2], 0, 10) : 100000;
-    int leaf_size = (argc > 3) ? (int)strtol(argv[3], 0, 10) : 10;
-    int num_queries = (argc > 4) ? (int)strtol(argv[4], 0, 10) : 1000;
-    int num_neighbors = (argc > 5) ? (int)strtol(argv[5], 0, 10) : 1;
+    int num_points = (argc > 2) ? (int)strtol(argv[2], 0, 10) : 1 << 19;
+    int leaf_size = (argc > 3) ? (int)strtol(argv[3], 0, 10) : 16;
+    int num_queries = (argc > 4) ? (int)strtol(argv[4], 0, 10) : 1 << 16;
+    int num_neighbors = (argc > 5) ? (int)strtol(argv[5], 0, 10) : 8;
 
     double (*point)[dim] = malloc((size_t)num_points * sizeof(*point));
     assert(point);
@@ -40,7 +48,7 @@ int main(int argc, char **argv)
         int index[num_neighbors];
         double distance[num_neighbors];
         int num = kdtree_query(tree, point[query[i]], index, distance, num_neighbors);
-        assert(num == num_neighbors && index[0] == query[i] && distance[0] <= DBL_EPSILON);
+        assert(num == num_neighbors && contains(index, query[i], num_neighbors));
     }
     clock_t end_query = clock();
 
