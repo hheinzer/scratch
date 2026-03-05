@@ -26,7 +26,6 @@ typedef struct {
 
 struct kdtree {
     int dim;
-    int num;
     int leaf_size;
     const double *point;
     int *index;
@@ -139,15 +138,14 @@ static void build(Kdtree *self, int *next, int beg, int end)
     build(self, next, mid, end);
 }
 
-Kdtree *kdtree_init(const double *point, int dim, int num, int leaf_size)
+Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size)
 {
-    assert(point && dim > 0 && num > 0 && leaf_size >= 0);
+    assert(point && num > 0 && dim > 0 && leaf_size >= 0);
 
     Kdtree *self = malloc(sizeof(*self));
     assert(self);
 
     self->dim = dim;
-    self->num = num;
     self->leaf_size = leaf_size ? leaf_size : LEAF_SIZE;
     self->point = point;
 
@@ -311,10 +309,6 @@ int kdtree_query(const Kdtree *self, const double *point, int *index, double *di
     for (int i = 0; i < self->dim; i++) {
         self->rect[i].min = -DBL_MAX;
         self->rect[i].max = DBL_MAX;
-    }
-
-    if (self->num < cap) {
-        cap = self->num;
     }
 
     int num = 0;

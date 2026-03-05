@@ -32,7 +32,7 @@ int main(int argc, char **argv)
     }
 
     clock_t beg_init = clock();
-    Kdtree *tree = kdtree_init(*point, dim, num_points, leaf_size);
+    Kdtree *tree = kdtree_init(*point, num_points, dim, leaf_size);
     clock_t end_init = clock();
 
     clock_t beg_query = clock();

@@ -4,7 +4,7 @@ typedef struct kdtree Kdtree;
 
 // Build a k-d tree from `num` points of dimension `dim`. `leaf_size` controls the number of points
 // stored in leaf nodes (0 uses a default).
-Kdtree *kdtree_init(const double *point, int dim, int num, int leaf_size);
+Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size);
 
 // Free all memory associated with the tree.
 void kdtree_deinit(Kdtree *self);
