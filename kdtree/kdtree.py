@@ -5,10 +5,13 @@ from numpy.ctypeslib import ndpointer
 
 _lib = ctypes.CDLL(os.path.join(os.path.dirname(os.path.abspath(__file__)), "libkdtree.so"))
 
-_void_p = ctypes.c_void_p
-
 _int = ctypes.c_int
 _f64 = ctypes.c_double
+_void_p = ctypes.c_void_p
+
+_int2 = _int * 2
+_int2_p = ctypes.POINTER(_int2)
+_int2_pp = ctypes.POINTER(_int2_p)
 
 _int_np = ndpointer(dtype=np.intc, flags="C")
 _f64_np = ndpointer(dtype=np.float64, flags="C")
@@ -24,6 +27,13 @@ _lib.kdtree_query.argtypes = [_void_p, _f64_np, _int_np, _f64_np, _int]
 
 _lib.kdtree_query_radius.restype = _int
 _lib.kdtree_query_radius.argtypes = [_void_p, _f64_np, _f64, _int_np, _f64_np, _int, _int]
+
+_lib.kdtree_query_pairs.restype = _int
+_lib.kdtree_query_pairs.argtypes = [_void_p, _f64, _int2_pp]
+
+_libc = ctypes.CDLL(None)
+_libc.free.argtypes = [_void_p]
+_libc.free.restype = None
 
 
 class KDTree:
@@ -57,3 +67,10 @@ class KDTree:
             if num <= cap:
                 return index[:num], distance[:num]
             cap = num
+
+    def query_pairs(self, radius):
+        pairs_p = _int2_p()
+        total = _lib.kdtree_query_pairs(self._ptr, radius, ctypes.byref(pairs_p))
+        result = {(pairs_p[i][0], pairs_p[i][1]) for i in range(total)}
+        _libc.free(ctypes.cast(pairs_p, ctypes.c_void_p))
+        return result

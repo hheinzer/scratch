@@ -1,7 +1,6 @@
 #include "kdtree.h"
 
 #include <assert.h>
-#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -30,7 +29,7 @@ struct kdtree {
     const double *point;
     int *index;
     Node *node;
-    Rect *rect;
+    Rect *bbox;
 };
 
 static int compute_size(const Kdtree *self, int num)
@@ -43,12 +42,17 @@ static int compute_size(const Kdtree *self, int num)
     return 1 + compute_size(self, left) + compute_size(self, right);
 }
 
+static Rect *get_bbox(const Kdtree *self, int idx)
+{
+    return &self->bbox[(long)idx * self->dim];
+}
+
 static double get_value(const Kdtree *self, int pos, int axis)
 {
     return self->point[((long)self->index[pos] * self->dim) + axis];
 }
 
-static int split_axis(const Kdtree *self, int beg, int end)
+static int split_axis(const Kdtree *self, int beg, int end, Rect *bbox)
 {
     int best_axis = 0;
     double best_spread = -1;
@@ -64,6 +68,8 @@ static int split_axis(const Kdtree *self, int beg, int end)
                 max = value;
             }
         }
+        bbox[i].min = min;
+        bbox[i].max = max;
         if (max - min > best_spread) {
             best_spread = max - min;
             best_axis = i;
@@ -117,7 +123,10 @@ static void build(Kdtree *self, int *next, int beg, int end)
     int idx = (*next)++;
     int num = end - beg;
 
+    Rect *bbox = get_bbox(self, idx);
+
     if (num <= self->leaf_size) {
+        split_axis(self, beg, end, bbox);
         self->node[idx].axis = -1;
         self->node[idx].child.leaf.beg = beg;
         self->node[idx].child.leaf.end = end;
@@ -125,7 +134,7 @@ static void build(Kdtree *self, int *next, int beg, int end)
     }
 
     int mid = (beg + end) / 2;
-    int axis = split_axis(self, beg, end);
+    int axis = split_axis(self, beg, end, bbox);
     quickselect(self, beg, end, mid, axis);
 
     self->node[idx].axis = axis;
@@ -159,12 +168,12 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size)
     self->node = malloc((size_t)size * sizeof(*self->node));
     assert(self->node);
 
+    self->bbox = malloc((size_t)size * (size_t)dim * sizeof(*self->bbox));
+    assert(self->bbox);
+
     int next = 0;
     build(self, &next, 0, num);
     assert(next == size);
-
-    self->rect = malloc((size_t)dim * sizeof(*self->rect));
-    assert(self->rect);
 
     return self;
 }
@@ -174,7 +183,7 @@ void kdtree_deinit(Kdtree *self)
     assert(self);
     free(self->index);
     free(self->node);
-    free(self->rect);
+    free(self->bbox);
     free(self);
 }
 
@@ -197,16 +206,16 @@ static void sorted_push(int *index, double *distance2, int *num, int cap, int id
     }
 }
 
-static double rect_dist2(const Kdtree *self, const double *point)
+static double bbox_dist2(const Kdtree *self, const double *point, const Rect *bbox)
 {
     double dist2 = 0;
     for (int i = 0; i < self->dim; i++) {
-        if (point[i] < self->rect[i].min) {
-            double diff = self->rect[i].min - point[i];
+        if (point[i] < bbox[i].min) {
+            double diff = bbox[i].min - point[i];
             dist2 += diff * diff;
         }
-        else if (point[i] > self->rect[i].max) {
-            double diff = point[i] - self->rect[i].max;
+        else if (point[i] > bbox[i].max) {
+            double diff = point[i] - bbox[i].max;
             dist2 += diff * diff;
         }
     }
@@ -230,49 +239,27 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
         return;
     }
 
-    int axis = node->axis;
-    double split_val = node->value;
-    double query_val = point[axis];
-
-    int closer_child;
-    int farther_child;
-    double *closer_limit;
-    double *farther_limit;
-
-    if (query_val <= split_val) {
-        closer_child = node->child.node.left;
-        farther_child = node->child.node.right;
-        closer_limit = &self->rect[axis].max;
-        farther_limit = &self->rect[axis].min;
+    int near;
+    int far;
+    if (point[node->axis] <= node->value) {
+        near = node->child.node.left;
+        far = node->child.node.right;
     }
     else {
-        closer_child = node->child.node.right;
-        farther_child = node->child.node.left;
-        closer_limit = &self->rect[axis].min;
-        farther_limit = &self->rect[axis].max;
+        near = node->child.node.right;
+        far = node->child.node.left;
     }
 
-    double closer_prev = *closer_limit;
-    *closer_limit = split_val;
-    search(self, closer_child, point, index, distance2, num, cap);
-    *closer_limit = closer_prev;
+    search(self, near, point, index, distance2, num, cap);
 
-    double farther_prev = *farther_limit;
-    *farther_limit = split_val;
-    if (*num < cap || rect_dist2(self, point) <= distance2[cap - 1]) {
-        search(self, farther_child, point, index, distance2, num, cap);
+    if (*num < cap || bbox_dist2(self, point, get_bbox(self, far)) <= distance2[cap - 1]) {
+        search(self, far, point, index, distance2, num, cap);
     }
-    *farther_limit = farther_prev;
 }
 
 int kdtree_query(const Kdtree *self, const double *point, int *index, double *distance, int cap)
 {
     assert(self && point && index && distance && cap > 0);
-
-    for (int i = 0; i < self->dim; i++) {
-        self->rect[i].min = -DBL_MAX;
-        self->rect[i].max = DBL_MAX;
-    }
 
     int num = 0;
     search(self, 0, point, index, distance, &num, cap);
@@ -287,7 +274,7 @@ int kdtree_query(const Kdtree *self, const double *point, int *index, double *di
 static void search_radius(const Kdtree *self, int idx, const double *point, double radius2,
                           int *index, double *distance, int *num, int cap)
 {
-    if (rect_dist2(self, point) > radius2) {
+    if (bbox_dist2(self, point, get_bbox(self, idx)) > radius2) {
         return;
     }
 
@@ -311,29 +298,14 @@ static void search_radius(const Kdtree *self, int idx, const double *point, doub
         return;
     }
 
-    int axis = node->axis;
-    double split_val = node->value;
-
-    double prev_max = self->rect[axis].max;
-    self->rect[axis].max = split_val;
     search_radius(self, node->child.node.left, point, radius2, index, distance, num, cap);
-    self->rect[axis].max = prev_max;
-
-    double prev_min = self->rect[axis].min;
-    self->rect[axis].min = split_val;
     search_radius(self, node->child.node.right, point, radius2, index, distance, num, cap);
-    self->rect[axis].min = prev_min;
 }
 
 int kdtree_query_radius(const Kdtree *self, const double *point, double radius, int *index,
                         double *distance, int cap, int sorted)
 {
     assert(self && point && radius >= 0 && index && distance && cap > 0);
-
-    for (int i = 0; i < self->dim; i++) {
-        self->rect[i].min = -DBL_MAX;
-        self->rect[i].max = DBL_MAX;
-    }
 
     int num = 0;
     search_radius(self, 0, point, radius * radius, index, distance, &num, cap);
@@ -355,4 +327,127 @@ int kdtree_query_radius(const Kdtree *self, const double *point, double radius, 
     }
 
     return num;
+}
+
+static double node_dist2(const Kdtree *self, int lhs, int rhs)
+{
+    const Rect *bbox_lhs = get_bbox(self, lhs);
+    const Rect *bbox_rhs = get_bbox(self, rhs);
+    double dist2 = 0;
+    for (int i = 0; i < self->dim; i++) {
+        if (bbox_lhs[i].max < bbox_rhs[i].min) {
+            double diff = bbox_rhs[i].min - bbox_lhs[i].max;
+            dist2 += diff * diff;
+        }
+        else if (bbox_rhs[i].max < bbox_lhs[i].min) {
+            double diff = bbox_lhs[i].min - bbox_rhs[i].max;
+            dist2 += diff * diff;
+        }
+    }
+    return dist2;
+}
+
+typedef struct {
+    int num;
+    int cap;
+    int (*pair)[2];
+} Pairs;
+
+static void pair_push(Pairs *pairs, int lhs, int rhs)
+{
+    if (pairs->num == pairs->cap) {
+        int new_cap = pairs->cap > 0 ? pairs->cap * 2 : 1;
+        int (*tmp)[2] = realloc(pairs->pair, (size_t)new_cap * sizeof(*tmp));
+        assert(tmp);
+        pairs->pair = tmp;
+        pairs->cap = new_cap;
+    }
+    pairs->pair[pairs->num][0] = lhs;
+    pairs->pair[pairs->num][1] = rhs;
+    pairs->num += 1;
+}
+
+static void search_pairs(const Kdtree *self, int lhs, int rhs, double radius2, Pairs *pairs)
+{
+    if (lhs > rhs) {
+        swap_int(&lhs, &rhs);
+    }
+
+    if (node_dist2(self, lhs, rhs) > radius2) {
+        return;
+    }
+
+    const Node *node_lhs = &self->node[lhs];
+
+    if (lhs == rhs) {
+        if (node_lhs->axis == -1) {
+            for (int i = node_lhs->child.leaf.beg; i < node_lhs->child.leaf.end; i++) {
+                for (int j = i + 1; j < node_lhs->child.leaf.end; j++) {
+                    double dist2 = 0;
+                    for (int k = 0; k < self->dim; k++) {
+                        double diff = get_value(self, i, k) - get_value(self, j, k);
+                        dist2 += diff * diff;
+                    }
+                    if (dist2 <= radius2) {
+                        int idx_i = self->index[i];
+                        int idx_j = self->index[j];
+                        if (idx_i > idx_j) {
+                            swap_int(&idx_i, &idx_j);
+                        }
+                        pair_push(pairs, idx_i, idx_j);
+                    }
+                }
+            }
+            return;
+        }
+        int left = node_lhs->child.node.left;
+        int right = node_lhs->child.node.right;
+        search_pairs(self, left, left, radius2, pairs);
+        search_pairs(self, left, right, radius2, pairs);
+        search_pairs(self, right, right, radius2, pairs);
+        return;
+    }
+
+    const Node *node_rhs = &self->node[rhs];
+
+    if (node_lhs->axis == -1 && node_rhs->axis == -1) {
+        for (int i = node_lhs->child.leaf.beg; i < node_lhs->child.leaf.end; i++) {
+            for (int j = node_rhs->child.leaf.beg; j < node_rhs->child.leaf.end; j++) {
+                double dist2 = 0;
+                for (int k = 0; k < self->dim; k++) {
+                    double diff = get_value(self, i, k) - get_value(self, j, k);
+                    dist2 += diff * diff;
+                }
+                if (dist2 <= radius2) {
+                    int idx_i = self->index[i];
+                    int idx_j = self->index[j];
+                    if (idx_i > idx_j) {
+                        swap_int(&idx_i, &idx_j);
+                    }
+                    pair_push(pairs, idx_i, idx_j);
+                }
+            }
+        }
+        return;
+    }
+
+    if (node_rhs->axis != -1) {
+        search_pairs(self, lhs, node_rhs->child.node.left, radius2, pairs);
+        search_pairs(self, lhs, node_rhs->child.node.right, radius2, pairs);
+    }
+    else {
+        search_pairs(self, node_lhs->child.node.left, rhs, radius2, pairs);
+        search_pairs(self, node_lhs->child.node.right, rhs, radius2, pairs);
+    }
+}
+
+int kdtree_query_pairs(const Kdtree *self, double radius, int (**pair)[2])
+{
+    assert(self && radius >= 0 && pair);
+
+    Pairs pairs = {0};
+    search_pairs(self, 0, 0, radius * radius, &pairs);
+
+    *pair = pairs.pair;
+    return pairs.num;
 }
