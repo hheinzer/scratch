@@ -27,3 +27,6 @@ int kdtree_pairs(const Kdtree *self, double radius, int (**pair)[2]);
 // Find all pairs (self, other) within `radius` using a dual-tree traversal. Both trees must have
 // the same dimension. Pairs are written to `*pair`. Caller must free. Returns total pair count.
 int kdtree_cross(const Kdtree *self, const Kdtree *other, double radius, int (**pair)[2]);
+
+// Dump the tree structure to disk.
+void kdtree_dump(const Kdtree *self, const char *fname);

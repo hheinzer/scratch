@@ -34,6 +34,9 @@ _lib.kdtree_pairs.argtypes = [_void_p, _f64, _int2_pp]
 _lib.kdtree_cross.restype = _int
 _lib.kdtree_cross.argtypes = [_void_p, _void_p, _f64, _int2_pp]
 
+_lib.kdtree_dump.restype = None
+_lib.kdtree_dump.argtypes = [_void_p, ctypes.c_char_p]
+
 _libc = ctypes.CDLL(None)
 _libc.free.argtypes = [_void_p]
 _libc.free.restype = None
@@ -81,3 +84,6 @@ class KDTree:
         result = {(pairs[i][0], pairs[i][1]) for i in range(total)}
         _libc.free(ctypes.cast(pairs, ctypes.c_void_p))
         return result
+
+    def dump(self, path):
+        _lib.kdtree_dump(self._ptr, path.encode())
