@@ -11,8 +11,15 @@ CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 # profile
 #CFLAGS += -fno-omit-frame-pointer -fno-inline-functions
 
+.PHONY: all clean
+
+all: main libkdtree.so
+
+clean:
+	@rm -rf main libkdtree.so
+
 main: main.c kdtree.c kdtree.h
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
 
-clean:
-	@rm -rf main
+libkdtree.so: kdtree.c kdtree.h
+	@$(CC) $(CFLAGS) -shared -fPIC -fno-sanitize=all $^ $(LDLIBS) -o $@
