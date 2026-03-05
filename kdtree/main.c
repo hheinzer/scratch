@@ -37,7 +37,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < num_queries; i++) {
         int index[cap];
         double distance[cap];
-        int num = kdtree_nearest(tree, point[query[i]], index, distance, cap);
+        int num = kdtree_nearest(tree, point[query[i]], index, distance, cap, 1);
         assert(num == cap && index[0] == query[i]);
     }
     clock_t end_query = clock();

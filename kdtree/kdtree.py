@@ -23,7 +23,7 @@ _lib.kdtree_deinit.restype = None
 _lib.kdtree_deinit.argtypes = [_void_p]
 
 _lib.kdtree_nearest.restype = _int
-_lib.kdtree_nearest.argtypes = [_void_p, _f64_np, _int_np, _f64_np, _int]
+_lib.kdtree_nearest.argtypes = [_void_p, _f64_np, _int_np, _f64_np, _int, _int]
 
 _lib.kdtree_radius.restype = _int
 _lib.kdtree_radius.argtypes = [_void_p, _f64_np, _f64, _int_np, _f64_np, _int, _int]
@@ -52,12 +52,12 @@ class KDTree:
         if hasattr(self, "_ptr") and self._ptr:
             _lib.kdtree_deinit(self._ptr)
 
-    def nearest(self, point, cap=1):
+    def nearest(self, point, cap=1, sorted=True):
         point = np.ascontiguousarray(point, dtype=np.float64)
         index = np.empty(cap, dtype=np.intc)
         distance = np.empty(cap, dtype=np.float64)
-        _lib.kdtree_nearest(self._ptr, point, index, distance, cap)
-        return index, distance
+        num = _lib.kdtree_nearest(self._ptr, point, index, distance, cap, int(sorted))
+        return index[:num], distance[:num]
 
     def radius(self, point, radius, cap=64, sorted=False):
         point = np.ascontiguousarray(point, dtype=np.float64)

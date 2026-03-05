@@ -7,7 +7,7 @@ from kdtree import KDTree
 def test_nearest(tree, tree_ref, queries, num):
     print(f"{"nearest":10s}", end=" ")
     for q in queries:
-        idx, dist = tree.nearest(q, num)
+        idx, dist = tree.nearest(q, num, sorted=True)
         dist_ref, idx_ref = tree_ref.query(q, num)
         idx_ref = idx_ref.astype(np.intc)
         assert np.array_equal(idx, idx_ref), "index mismatch"

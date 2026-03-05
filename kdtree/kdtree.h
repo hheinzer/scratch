@@ -9,12 +9,14 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size);
 // Free all memory associated with the tree.
 void kdtree_deinit(Kdtree *self);
 
-// Find the nearest neighbors of `point`, writing up to `cap` results to `index` and `distance`
-// in ascending order. Returns the number of results.
-int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int cap);
+// Find the nearest neighbors of `point`, writing up to `cap` results to `index` and `distance`.
+// If `sorted`, results are in ascending order. Returns the number of results.
+int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int cap,
+                   int sorted);
 
 // Find all points within `radius` of `point`, writing up to `cap` results to `index` and
-// `distance`. Returns the total number of points found (can be larger than `cap`).
+// `distance`. If `sorted`, results are in ascending order. Returns the total number of points found
+// (can be larger than `cap`).
 int kdtree_radius(const Kdtree *self, const double *point, double radius, int *index,
                   double *distance, int cap, int sorted);
 

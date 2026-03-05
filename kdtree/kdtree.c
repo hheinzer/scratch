@@ -4,7 +4,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-enum { LEAF_SIZE = 10 };
+enum { LEAF_SIZE = 10, HEAP_THRESHOLD = 32 };
 
 typedef struct {
     int num;       // number of points in subtree
@@ -191,20 +191,88 @@ void kdtree_deinit(Kdtree *self)
 
 static void sorted_push(int *index, double *distance2, int *num, int cap, int idx, double dist2)
 {
-    if (*num == cap && dist2 >= distance2[cap - 1]) {
+    if (*num == cap && dist2 >= distance2[0]) {
         return;
     }
-    int end = (*num < cap) ? *num : cap - 1;
-    int pos = end;
-    while (pos > 0 && distance2[pos - 1] > dist2) {
-        index[pos] = index[pos - 1];
-        distance2[pos] = distance2[pos - 1];
-        pos -= 1;
-    }
-    index[pos] = idx;
-    distance2[pos] = dist2;
     if (*num < cap) {
+        int pos = *num;
+        while (pos > 0 && distance2[pos - 1] < dist2) {
+            index[pos] = index[pos - 1];
+            distance2[pos] = distance2[pos - 1];
+            pos -= 1;
+        }
+        index[pos] = idx;
+        distance2[pos] = dist2;
         *num += 1;
+    }
+    else {
+        int pos = 0;
+        while (pos < cap - 1 && distance2[pos + 1] >= dist2) {
+            index[pos] = index[pos + 1];
+            distance2[pos] = distance2[pos + 1];
+            pos += 1;
+        }
+        index[pos] = idx;
+        distance2[pos] = dist2;
+    }
+}
+
+static void swap_double(double *lhs, double *rhs)
+{
+    double swap = *lhs;
+    *lhs = *rhs;
+    *rhs = swap;
+}
+
+static void sift_up(int *index, double *distance2, int pos)
+{
+    while (pos > 0) {
+        int parent = (pos - 1) / 2;
+        if (distance2[parent] >= distance2[pos]) {
+            break;
+        }
+        swap_int(&index[parent], &index[pos]);
+        swap_double(&distance2[parent], &distance2[pos]);
+        pos = parent;
+    }
+}
+
+static void sift_down(int *index, double *distance2, int pos, int num)
+{
+    while (1) {
+        int left = (2 * pos) + 1;
+        int right = (2 * pos) + 2;
+        int largest = pos;
+        if (left < num && distance2[left] > distance2[largest]) {
+            largest = left;
+        }
+        if (right < num && distance2[right] > distance2[largest]) {
+            largest = right;
+        }
+        if (largest == pos) {
+            break;
+        }
+        swap_int(&index[largest], &index[pos]);
+        swap_double(&distance2[largest], &distance2[pos]);
+        pos = largest;
+    }
+}
+
+static void heap_push(int *index, double *distance2, int *num, int cap, int idx, double dist2)
+{
+    if (*num == cap && dist2 >= distance2[0]) {
+        return;
+    }
+    if (*num < cap) {
+        index[*num] = idx;
+        distance2[*num] = dist2;
+        sift_up(index, distance2, *num);
+        *num += 1;
+    }
+    else {
+        index[0] = idx;
+        distance2[0] = dist2;
+        sift_down(index, distance2, 0, cap);
     }
 }
 
@@ -236,7 +304,12 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
                 double diff = point[j] - get_value(self, i, j);
                 dist2 += diff * diff;
             }
-            sorted_push(index, distance2, num, cap, self->index[i], dist2);
+            if (cap <= HEAP_THRESHOLD) {
+                sorted_push(index, distance2, num, cap, self->index[i], dist2);
+            }
+            else {
+                heap_push(index, distance2, num, cap, self->index[i], dist2);
+            }
         }
         return;
     }
@@ -254,12 +327,23 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
 
     search(self, near, point, index, distance2, num, cap);
 
-    if (*num < cap || bbox_dist2(self, point, get_bbox(self, far)) <= distance2[cap - 1]) {
+    if (*num < cap || bbox_dist2(self, point, get_bbox(self, far)) <= distance2[0]) {
         search(self, far, point, index, distance2, num, cap);
     }
 }
 
-int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int cap)
+static void sort_results(int *index, double *distance, int num)
+{
+    while (num > 1) {
+        swap_int(&index[0], &index[num - 1]);
+        swap_double(&distance[0], &distance[num - 1]);
+        num -= 1;
+        sift_down(index, distance, 0, num);
+    }
+}
+
+int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int cap,
+                   int sorted)
 {
     assert(self && point && index && distance && cap > 0);
 
@@ -268,6 +352,10 @@ int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *
 
     for (int i = 0; i < num; i++) {
         distance[i] = sqrt(distance[i]);
+    }
+
+    if (sorted) {
+        sort_results(index, distance, num);
     }
 
     return num;
@@ -314,18 +402,10 @@ int kdtree_radius(const Kdtree *self, const double *point, double radius, int *i
 
     if (sorted) {
         int min = (num < cap) ? num : cap;
-        for (int i = 1; i < min; i++) {
-            int idx = index[i];
-            double dist = distance[i];
-            int pos = i;
-            while (pos > 0 && distance[pos - 1] > dist) {
-                index[pos] = index[pos - 1];
-                distance[pos] = distance[pos - 1];
-                pos -= 1;
-            }
-            index[pos] = idx;
-            distance[pos] = dist;
+        for (int i = (min / 2) - 1; i >= 0; i--) {
+            sift_down(index, distance, i, min);
         }
+        sort_results(index, distance, min);
     }
 
     return num;
