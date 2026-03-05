@@ -267,9 +267,9 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
         return;
     }
 
-    int split = node->axis;
+    int axis = node->axis;
     double split_val = node->value;
-    double query_val = point[split];
+    double query_val = point[axis];
 
     int closer_child;
     int farther_child;
@@ -279,14 +279,14 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
     if (query_val <= split_val) {
         closer_child = node->child.node.left;
         farther_child = node->child.node.right;
-        closer_limit = &self->rect[split].max;
-        farther_limit = &self->rect[split].min;
+        closer_limit = &self->rect[axis].max;
+        farther_limit = &self->rect[axis].min;
     }
     else {
         closer_child = node->child.node.right;
         farther_child = node->child.node.left;
-        closer_limit = &self->rect[split].min;
-        farther_limit = &self->rect[split].max;
+        closer_limit = &self->rect[axis].min;
+        farther_limit = &self->rect[axis].max;
     }
 
     double closer_prev = *closer_limit;
@@ -321,6 +321,63 @@ int kdtree_query(const Kdtree *self, const double *point, int *index, double *di
     for (int i = 0; i < num; i++) {
         distance[i] = sqrt(distance[i]);
     }
+
+    return num;
+}
+
+static void search_radius(const Kdtree *self, int idx, const double *point, double radius2,
+                          int *index, double *distance, int *num, int cap)
+{
+    if (rect_dist2(self, point) > radius2) {
+        return;
+    }
+
+    const Node *node = &self->node[idx];
+
+    if (node->axis == -1) {
+        for (int i = node->child.leaf.beg; i < node->child.leaf.end; i++) {
+            double dist2 = 0;
+            for (int j = 0; j < self->dim; j++) {
+                double diff = point[j] - get_value(self, i, j);
+                dist2 += diff * diff;
+            }
+            if (dist2 <= radius2) {
+                if (*num < cap) {
+                    index[*num] = self->index[i];
+                    distance[*num] = sqrt(dist2);
+                }
+                *num += 1;
+            }
+        }
+        return;
+    }
+
+    int axis = node->axis;
+    double split_val = node->value;
+
+    double prev_max = self->rect[axis].max;
+    self->rect[axis].max = split_val;
+    search_radius(self, node->child.node.left, point, radius2, index, distance, num, cap);
+    self->rect[axis].max = prev_max;
+
+    double prev_min = self->rect[axis].min;
+    self->rect[axis].min = split_val;
+    search_radius(self, node->child.node.right, point, radius2, index, distance, num, cap);
+    self->rect[axis].min = prev_min;
+}
+
+int kdtree_query_radius(const Kdtree *self, const double *point, double radius, int *index,
+                        double *distance, int cap)
+{
+    assert(self && point && radius >= 0 && index && distance && cap > 0);
+
+    for (int i = 0; i < self->dim; i++) {
+        self->rect[i].min = -DBL_MAX;
+        self->rect[i].max = DBL_MAX;
+    }
+
+    int num = 0;
+    search_radius(self, 0, point, radius * radius, index, distance, &num, cap);
 
     return num;
 }
