@@ -257,7 +257,7 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
     }
 }
 
-int kdtree_query(const Kdtree *self, const double *point, int *index, double *distance, int cap)
+int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int cap)
 {
     assert(self && point && index && distance && cap > 0);
 
@@ -302,8 +302,8 @@ static void search_radius(const Kdtree *self, int idx, const double *point, doub
     search_radius(self, node->child.node.right, point, radius2, index, distance, num, cap);
 }
 
-int kdtree_query_radius(const Kdtree *self, const double *point, double radius, int *index,
-                        double *distance, int cap, int sorted)
+int kdtree_radius(const Kdtree *self, const double *point, double radius, int *index,
+                  double *distance, int cap, int sorted)
 {
     assert(self && point && radius >= 0 && index && distance && cap > 0);
 
@@ -441,7 +441,7 @@ static void search_pairs(const Kdtree *self, int lhs, int rhs, double radius2, P
     }
 }
 
-int kdtree_query_pairs(const Kdtree *self, double radius, int (**pair)[2])
+int kdtree_pairs(const Kdtree *self, double radius, int (**pair)[2])
 {
     assert(self && radius >= 0 && pair);
 

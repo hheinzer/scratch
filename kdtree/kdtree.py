@@ -22,14 +22,14 @@ _lib.kdtree_init.argtypes = [_f64_np, _int, _int, _int]
 _lib.kdtree_deinit.restype = None
 _lib.kdtree_deinit.argtypes = [_void_p]
 
-_lib.kdtree_query.restype = _int
-_lib.kdtree_query.argtypes = [_void_p, _f64_np, _int_np, _f64_np, _int]
+_lib.kdtree_nearest.restype = _int
+_lib.kdtree_nearest.argtypes = [_void_p, _f64_np, _int_np, _f64_np, _int]
 
-_lib.kdtree_query_radius.restype = _int
-_lib.kdtree_query_radius.argtypes = [_void_p, _f64_np, _f64, _int_np, _f64_np, _int, _int]
+_lib.kdtree_radius.restype = _int
+_lib.kdtree_radius.argtypes = [_void_p, _f64_np, _f64, _int_np, _f64_np, _int, _int]
 
-_lib.kdtree_query_pairs.restype = _int
-_lib.kdtree_query_pairs.argtypes = [_void_p, _f64, _int2_pp]
+_lib.kdtree_pairs.restype = _int
+_lib.kdtree_pairs.argtypes = [_void_p, _f64, _int2_pp]
 
 _libc = ctypes.CDLL(None)
 _libc.free.argtypes = [_void_p]
@@ -49,28 +49,26 @@ class KDTree:
         if hasattr(self, "_ptr") and self._ptr:
             _lib.kdtree_deinit(self._ptr)
 
-    def query(self, point, k=1):
+    def nearest(self, point, cap=1):
         point = np.ascontiguousarray(point, dtype=np.float64)
-        index = np.empty(k, dtype=np.intc)
-        distance = np.empty(k, dtype=np.float64)
-        _lib.kdtree_query(self._ptr, point, index, distance, k)
+        index = np.empty(cap, dtype=np.intc)
+        distance = np.empty(cap, dtype=np.float64)
+        _lib.kdtree_nearest(self._ptr, point, index, distance, cap)
         return index, distance
 
-    def query_radius(self, point, radius, cap=64, sorted=False):
+    def radius(self, point, radius, cap=64, sorted=False):
         point = np.ascontiguousarray(point, dtype=np.float64)
         while True:
             index = np.empty(cap, dtype=np.intc)
             distance = np.empty(cap, dtype=np.float64)
-            num = _lib.kdtree_query_radius(
-                self._ptr, point, radius, index, distance, cap, int(sorted)
-            )
+            num = _lib.kdtree_radius(self._ptr, point, radius, index, distance, cap, int(sorted))
             if num <= cap:
                 return index[:num], distance[:num]
             cap = num
 
-    def query_pairs(self, radius):
+    def pairs(self, radius):
         pairs_p = _int2_p()
-        total = _lib.kdtree_query_pairs(self._ptr, radius, ctypes.byref(pairs_p))
+        total = _lib.kdtree_pairs(self._ptr, radius, ctypes.byref(pairs_p))
         result = {(pairs_p[i][0], pairs_p[i][1]) for i in range(total)}
         _libc.free(ctypes.cast(pairs_p, ctypes.c_void_p))
         return result
