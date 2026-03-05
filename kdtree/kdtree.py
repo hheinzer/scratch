@@ -44,7 +44,6 @@ class KDTree:
         points = np.ascontiguousarray(points, dtype=np.float64)
         if points.ndim != 2:
             raise ValueError("points must be a 2D array of shape (num, dim)")
-        self._points = points
         num, dim = points.shape
         self._ptr = _lib.kdtree_init(points, num, dim, leaf_size)
 
@@ -70,15 +69,15 @@ class KDTree:
             cap = num
 
     def pairs(self, radius):
-        pairs_p = _int2_p()
-        total = _lib.kdtree_pairs(self._ptr, radius, ctypes.byref(pairs_p))
-        result = {(pairs_p[i][0], pairs_p[i][1]) for i in range(total)}
-        _libc.free(ctypes.cast(pairs_p, ctypes.c_void_p))
+        pairs = _int2_p()
+        total = _lib.kdtree_pairs(self._ptr, radius, ctypes.byref(pairs))
+        result = {(pairs[i][0], pairs[i][1]) for i in range(total)}
+        _libc.free(ctypes.cast(pairs, ctypes.c_void_p))
         return result
 
     def cross(self, other, radius):
-        pairs_p = _int2_p()
-        total = _lib.kdtree_cross(self._ptr, other._ptr, radius, ctypes.byref(pairs_p))
-        result = {(pairs_p[i][0], pairs_p[i][1]) for i in range(total)}
-        _libc.free(ctypes.cast(pairs_p, ctypes.c_void_p))
+        pairs = _int2_p()
+        total = _lib.kdtree_cross(self._ptr, other._ptr, radius, ctypes.byref(pairs))
+        result = {(pairs[i][0], pairs[i][1]) for i in range(total)}
+        _libc.free(ctypes.cast(pairs, ctypes.c_void_p))
         return result
