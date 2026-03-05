@@ -10,7 +10,7 @@
 enum { LEAF_SIZE = 10 };
 
 typedef struct {
-    int dim;       // split dimension; -1 => leaf
+    int axis;      // split axis; -1 => leaf
     double value;  // split value
     union {
         struct {
@@ -46,20 +46,20 @@ static int compute_size(const Kdtree *self, int num)
     return 1 + compute_size(self, left) + compute_size(self, right);
 }
 
-static double get_value(const Kdtree *self, int pos, int dim)
+static double get_value(const Kdtree *self, int pos, int axis)
 {
-    return self->point[((long)self->index[pos] * self->dim) + dim];
+    return self->point[((long)self->index[pos] * self->dim) + axis];
 }
 
-static int split_dim(const Kdtree *self, int beg, int end)
+static int split_axis(const Kdtree *self, int beg, int end)
 {
-    int best_dim = 0;
+    int best_axis = 0;
     double best_spread = -1;
-    for (int dim = 0; dim < self->dim; dim++) {
-        double min = get_value(self, beg, dim);
+    for (int i = 0; i < self->dim; i++) {
+        double min = get_value(self, beg, i);
         double max = min;
-        for (int i = beg + 1; i < end; i++) {
-            double value = get_value(self, i, dim);
+        for (int j = beg + 1; j < end; j++) {
+            double value = get_value(self, j, i);
             if (value < min) {
                 min = value;
             }
@@ -69,10 +69,10 @@ static int split_dim(const Kdtree *self, int beg, int end)
         }
         if (max - min > best_spread) {
             best_spread = max - min;
-            best_dim = dim;
+            best_axis = i;
         }
     }
-    return best_dim;
+    return best_axis;
 }
 
 static void swap_int(int *lhs, int *rhs)
@@ -82,19 +82,19 @@ static void swap_int(int *lhs, int *rhs)
     *rhs = swap;
 }
 
-static void quickselect(Kdtree *self, int beg, int end, int mid, int dim)
+static void quickselect(Kdtree *self, int beg, int end, int mid, int axis)
 {
     int min = beg;
     int max = end - 1;
     while (min < max) {
-        double pivot = get_value(self, (min + max) / 2, dim);
+        double pivot = get_value(self, (min + max) / 2, axis);
         int left = min;
         int right = max;
         while (left <= right) {
-            while (get_value(self, left, dim) < pivot) {
+            while (get_value(self, left, axis) < pivot) {
                 left += 1;
             }
-            while (get_value(self, right, dim) > pivot) {
+            while (get_value(self, right, axis) > pivot) {
                 right -= 1;
             }
             if (left <= right) {
@@ -121,18 +121,18 @@ static void build(Kdtree *self, int *next, int beg, int end)
     int num = end - beg;
 
     if (num <= self->leaf_size) {
-        self->node[idx].dim = -1;
+        self->node[idx].axis = -1;
         self->node[idx].child.leaf.beg = beg;
         self->node[idx].child.leaf.end = end;
         return;
     }
 
     int mid = (beg + end) / 2;
-    int dim = split_dim(self, beg, end);
-    quickselect(self, beg, end, mid, dim);
+    int axis = split_axis(self, beg, end);
+    quickselect(self, beg, end, mid, axis);
 
-    self->node[idx].dim = dim;
-    self->node[idx].value = get_value(self, mid, dim);
+    self->node[idx].axis = axis;
+    self->node[idx].value = get_value(self, mid, axis);
 
     self->node[idx].child.node.left = *next;
     build(self, next, beg, mid);
@@ -255,7 +255,7 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
 {
     const Node *node = &self->node[idx];
 
-    if (node->dim == -1) {
+    if (node->axis == -1) {
         for (int i = node->child.leaf.beg; i < node->child.leaf.end; i++) {
             double dist2 = 0;
             for (int j = 0; j < self->dim; j++) {
@@ -267,7 +267,7 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
         return;
     }
 
-    int split = node->dim;
+    int split = node->axis;
     double split_val = node->value;
     double query_val = point[split];
 
