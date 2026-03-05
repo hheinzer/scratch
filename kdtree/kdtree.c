@@ -326,7 +326,7 @@ static void search_radius(const Kdtree *self, int idx, const double *point, doub
 }
 
 int kdtree_query_radius(const Kdtree *self, const double *point, double radius, int *index,
-                        double *distance, int cap)
+                        double *distance, int cap, int sorted)
 {
     assert(self && point && radius >= 0 && index && distance && cap > 0);
 
@@ -337,6 +337,22 @@ int kdtree_query_radius(const Kdtree *self, const double *point, double radius, 
 
     int num = 0;
     search_radius(self, 0, point, radius * radius, index, distance, &num, cap);
+
+    if (sorted) {
+        int min = (num < cap) ? num : cap;
+        for (int i = 1; i < min; i++) {
+            int idx = index[i];
+            double dist = distance[i];
+            int pos = i;
+            while (pos > 0 && distance[pos - 1] > dist) {
+                index[pos] = index[pos - 1];
+                distance[pos] = distance[pos - 1];
+                pos -= 1;
+            }
+            index[pos] = idx;
+            distance[pos] = dist;
+        }
+    }
 
     return num;
 }

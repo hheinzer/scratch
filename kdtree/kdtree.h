@@ -16,4 +16,4 @@ int kdtree_query(const Kdtree *self, const double *point, int *index, double *di
 // Find all points within `radius` of `point`, writing up to `cap` results to `index` and
 // `distance`. Returns the total number of points found (can be larger than `cap`).
 int kdtree_query_radius(const Kdtree *self, const double *point, double radius, int *index,
-                        double *distance, int cap);
+                        double *distance, int cap, int sorted);

@@ -5,23 +5,25 @@ from numpy.ctypeslib import ndpointer
 
 _lib = ctypes.CDLL(os.path.join(os.path.dirname(os.path.abspath(__file__)), "libkdtree.so"))
 
+_void_p = ctypes.c_void_p
+
 _int = ctypes.c_int
 _f64 = ctypes.c_double
-_void_p = ctypes.c_void_p
-_int_p = ndpointer(dtype=np.intc, flags="C")
-_f64_p = ndpointer(dtype=np.float64, flags="C")
+
+_int_np = ndpointer(dtype=np.intc, flags="C")
+_f64_np = ndpointer(dtype=np.float64, flags="C")
 
 _lib.kdtree_init.restype = _void_p
-_lib.kdtree_init.argtypes = [_f64_p, _int, _int, _int]
+_lib.kdtree_init.argtypes = [_f64_np, _int, _int, _int]
 
 _lib.kdtree_deinit.restype = None
 _lib.kdtree_deinit.argtypes = [_void_p]
 
 _lib.kdtree_query.restype = _int
-_lib.kdtree_query.argtypes = [_void_p, _f64_p, _int_p, _f64_p, _int]
+_lib.kdtree_query.argtypes = [_void_p, _f64_np, _int_np, _f64_np, _int]
 
 _lib.kdtree_query_radius.restype = _int
-_lib.kdtree_query_radius.argtypes = [_void_p, _f64_p, _f64, _int_p, _f64_p, _int]
+_lib.kdtree_query_radius.argtypes = [_void_p, _f64_np, _f64, _int_np, _f64_np, _int, _int]
 
 
 class KDTree:
@@ -44,12 +46,14 @@ class KDTree:
         _lib.kdtree_query(self._ptr, point, index, distance, k)
         return index, distance
 
-    def query_radius(self, point, radius, cap=64):
+    def query_radius(self, point, radius, cap=64, sorted=False):
         point = np.ascontiguousarray(point, dtype=np.float64)
         while True:
             index = np.empty(cap, dtype=np.intc)
             distance = np.empty(cap, dtype=np.float64)
-            num = _lib.kdtree_query_radius(self._ptr, point, radius, index, distance, cap)
+            num = _lib.kdtree_query_radius(
+                self._ptr, point, radius, index, distance, cap, int(sorted)
+            )
             if num <= cap:
                 return index[:num], distance[:num]
             cap = num
