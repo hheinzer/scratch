@@ -11,12 +11,15 @@ CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 # profile
 #CFLAGS += -fno-omit-frame-pointer -fno-inline-functions
 
-.PHONY: all clean
+.PHONY: all clean test
 
 all: main libkdtree.so
 
 clean:
 	@rm -rf main libkdtree.so
+
+test: libkdtree.so
+	@python test.py
 
 main: main.c kdtree.c kdtree.h
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@

@@ -12,7 +12,7 @@ def test_nearest(tree, tree_ref, queries, num):
         idx_ref = idx_ref.astype(np.intc)
         assert np.array_equal(idx, idx_ref), "index mismatch"
         assert np.allclose(dist, dist_ref), "distance mismatch"
-    print("ok")
+    print("passed")
 
 
 def test_radius(tree, tree_ref, queries, radius):
@@ -22,7 +22,7 @@ def test_radius(tree, tree_ref, queries, radius):
         idx_ref = tree_ref.query_ball_point(q, radius)
         assert set(idx.tolist()) == set(idx_ref), "index mismatch"
         assert np.all(dist[:-1] <= dist[1:]), "not sorted"
-    print("ok")
+    print("passed")
 
 
 def test_pairs(tree, tree_ref, radius):
@@ -30,7 +30,7 @@ def test_pairs(tree, tree_ref, radius):
     pair = tree.pairs(radius)
     pair_ref = tree_ref.query_pairs(radius)
     assert pair == pair_ref, "pair mismatch"
-    print("ok")
+    print("passed")
 
 
 def test_cross(tree, tree_ref, other, other_ref, radius):
@@ -39,18 +39,18 @@ def test_cross(tree, tree_ref, other, other_ref, radius):
     list_ref = tree_ref.query_ball_tree(other_ref, radius)
     pair_ref = {(i, j) for i, js in enumerate(list_ref) for j in js}
     assert pair == pair_ref, "pair mismatch"
-    print("ok")
+    print("passed")
 
 
 def test_counts(tree, tree_ref, radii):
     print(f"{"counts":10s}", end=" ")
     # scipy counts N self-pairs (distance=0) and both orderings of each pair,
-    # so scipy_total = N + 2 * unique_pairs; recover unique_pairs accordingly.
+    # so scipy_total = N + 2 * unique_pairs; recover unique_pairs accordingly
     scipy_total = tree_ref.count_neighbors(tree_ref, radii)
     counts_ref = (scipy_total - tree_ref.n) // 2
     assert np.array_equal(tree.counts(radii), counts_ref)
     assert np.array_equal(tree.counts(radii, cumulative=False), np.diff(counts_ref, prepend=0))
-    print("ok")
+    print("passed")
 
 
 def main():
