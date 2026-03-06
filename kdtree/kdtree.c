@@ -27,11 +27,11 @@ typedef struct {
 } Rect;
 
 struct kdtree {
-    int num;
+    int num_points;
+    int num_nodes;
     int dim;
     int leaf_size;
     const double *point;
-    int size;
     int *index;
     Node *node;
     Rect *bbox;
@@ -160,7 +160,7 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size)
     Kdtree *self = malloc(sizeof(*self));
     assert(self);
 
-    self->num = num;
+    self->num_points = num;
     self->dim = dim;
     self->leaf_size = leaf_size ? leaf_size : LEAF_SIZE;
     self->point = point;
@@ -171,16 +171,16 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size)
         self->index[i] = i;
     }
 
-    self->size = compute_size(self, num);
-    self->node = malloc((size_t)self->size * sizeof(*self->node));
+    self->num_nodes = compute_size(self, num);
+    self->node = malloc((size_t)self->num_nodes * sizeof(*self->node));
     assert(self->node);
 
-    self->bbox = malloc((size_t)self->size * (size_t)dim * sizeof(*self->bbox));
+    self->bbox = malloc((size_t)self->num_nodes * (size_t)dim * sizeof(*self->bbox));
     assert(self->bbox);
 
     int next = 0;
     build(self, &next, 0, num);
-    assert(next == self->size);
+    assert(next == self->num_nodes);
 
     return self;
 }
@@ -708,19 +708,29 @@ void kdtree_dump(const Kdtree *self, const char *fname)
     FILE *file = fopen(fname, "w");
     assert(file);
 
-    int num_nodes = self->size;
+    int num_nodes = self->num_nodes;
     fprintf(file, "# kdtree dim=%d nodes=%d\n", self->dim, num_nodes);
-    fprintf(file, "# idx num axis value left right beg end bbox_min[0..dim-1] bbox_max[0..dim-1]\n");
+    fprintf(file, "# idx num axis value left right beg end depth bbox_min bbox_max\n");
+
+    int *depth = calloc((size_t)num_nodes, sizeof(*depth));
+    assert(depth);
+    for (int i = 0; i < num_nodes; i++) {
+        const Node *node = &self->node[i];
+        if (node->axis != -1) {
+            depth[node->child.node.left] = depth[i] + 1;
+            depth[node->child.node.right] = depth[i] + 1;
+        }
+    }
 
     for (int i = 0; i < num_nodes; i++) {
         const Node *node = &self->node[i];
         if (node->axis == -1) {
-            fprintf(file, "%d %d %d %g %d %d %d %d", i, node->num, node->axis, 0.0, -1, -1,
-                    node->child.leaf.beg, node->child.leaf.end);
+            fprintf(file, "%d %d %d %g %d %d %d %d %d", i, node->num, node->axis, 0.0, -1, -1,
+                    node->child.leaf.beg, node->child.leaf.end, depth[i]);
         }
         else {
-            fprintf(file, "%d %d %d %g %d %d %d %d", i, node->num, node->axis, node->value,
-                    node->child.node.left, node->child.node.right, 0, 0);
+            fprintf(file, "%d %d %d %g %d %d %d %d %d", i, node->num, node->axis, node->value,
+                    node->child.node.left, node->child.node.right, 0, 0, depth[i]);
         }
         const Rect *bbox = get_bbox(self, i);
         for (int j = 0; j < self->dim; j++) {
@@ -732,5 +742,6 @@ void kdtree_dump(const Kdtree *self, const char *fname)
         fprintf(file, "\n");
     }
 
+    free(depth);
     fclose(file);
 }

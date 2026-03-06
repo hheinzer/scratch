@@ -24,8 +24,9 @@ def load_dump(tree):
     right = data[:, 5].astype(int)
     beg = data[:, 6].astype(int)
     end = data[:, 7].astype(int)
-    bbox_min = data[:, 8 : 8 + dim]
-    bbox_max = data[:, 8 + dim :]
+    depth = data[:, 8].astype(int)
+    bbox_min = data[:, 9 : 9 + dim]
+    bbox_max = data[:, 9 + dim :]
     return dict(
         dim=dim,
         idx=idx,
@@ -36,6 +37,7 @@ def load_dump(tree):
         right=right,
         beg=beg,
         end=end,
+        depth=depth,
         bbox_min=bbox_min,
         bbox_max=bbox_max,
     )
@@ -43,22 +45,28 @@ def load_dump(tree):
 
 def main():
     rng = np.random.default_rng(0)
+
     centers = rng.uniform(-0.7, 0.7, (10, 2))
     cluster = rng.integers(0, 10, 1000)
     points = centers[cluster] + rng.normal(0, 0.1, (1000, 2))
 
     tree = KDTree(points, leaf_size=8)
-
     dump = load_dump(tree)
 
-    fig, ax = plt.subplots(figsize=(7, 7))
+    _, ax = plt.subplots()
 
-    for lo, hi in zip(dump["bbox_min"], dump["bbox_max"]):
-        ax.add_patch(patches.Rectangle(lo, hi[0] - lo[0], hi[1] - lo[1], ec="orange", fc="none"))
+    depth = dump["depth"]
+    cmap = plt.get_cmap("Oranges")
+    for lo, hi, dep in zip(dump["bbox_min"], dump["bbox_max"], depth):
+        color = cmap(0.5 * (dep - depth.min()) / max(depth.max() - depth.min(), 1))
+        ax.add_patch(patches.Rectangle(lo, hi[0] - lo[0], hi[1] - lo[1], fc=color))
 
-    ax.scatter(points[:, 0], points[:, 1], s=1, c="purple")
+    ax.scatter(points[:, 0], points[:, 1], s=2, c="purple", zorder=2)
 
-    fig.tight_layout()
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+
+    plt.tight_layout()
     plt.show()
 
 
