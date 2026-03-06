@@ -25,20 +25,12 @@ def test_radius(tree, tree_ref, queries, radius):
     print("passed")
 
 
-def test_pairs(tree, tree_ref, radius):
+def test_pairs(tree, tree_ref, other, other_ref, radius):
     print(f"{"pairs":10s}", end=" ")
-    pair = tree.pairs(radius)
-    pair_ref = tree_ref.query_pairs(radius)
-    assert pair == pair_ref, "pair mismatch"
-    print("passed")
-
-
-def test_cross(tree, tree_ref, other, other_ref, radius):
-    print(f"{"cross":10s}", end=" ")
-    pair = tree.cross(other, radius)
+    assert tree.pairs(radius) == tree_ref.query_pairs(radius), "self mismatch"
     list_ref = tree_ref.query_ball_tree(other_ref, radius)
     pair_ref = {(i, j) for i, js in enumerate(list_ref) for j in js}
-    assert pair == pair_ref, "pair mismatch"
+    assert tree.pairs(radius, other) == pair_ref, "cross mismatch"
     print("passed")
 
 
@@ -74,9 +66,8 @@ def main():
 
     test_nearest(tree, tree_ref, queries, num)
     test_radius(tree, tree_ref, queries, radius)
-    test_pairs(tree, tree_ref, radius)
+    test_pairs(tree, tree_ref, other, other_ref, radius)
     test_counts(tree, tree_ref, np.linspace(0.05, 0.3, 6))
-    test_cross(tree, tree_ref, other, other_ref, radius)
 
 
 if __name__ == "__main__":

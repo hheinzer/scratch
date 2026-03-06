@@ -528,17 +528,6 @@ static void search_pairs(const Kdtree *self, int lhs, int rhs, double radius2, P
     }
 }
 
-int kdtree_pairs(const Kdtree *self, double radius, int (**pair)[2])
-{
-    assert(self && radius >= 0 && pair);
-
-    Pairs pairs = {0};
-    search_pairs(self, 0, 0, radius * radius, &pairs);
-
-    *pair = pairs.pair;
-    return pairs.num;
-}
-
 static double cross_dist2(const Kdtree *self, const Kdtree *other, int idx_self, int idx_other)
 {
     const Rect *bbox_self = get_bbox(self, idx_self);
@@ -593,12 +582,18 @@ static void search_cross(const Kdtree *self, const Kdtree *other, int idx_self, 
     }
 }
 
-int kdtree_cross(const Kdtree *self, const Kdtree *other, double radius, int (**pair)[2])
+int kdtree_pairs(const Kdtree *self, const Kdtree *other, double radius, int (**pair)[2])
 {
-    assert(self && other && self->dim == other->dim && radius >= 0 && pair);
+    assert(self && radius >= 0 && pair);
 
     Pairs pairs = {0};
-    search_cross(self, other, 0, 0, radius * radius, &pairs);
+    if (!other) {
+        search_pairs(self, 0, 0, radius * radius, &pairs);
+    }
+    else {
+        assert(self->dim == other->dim);
+        search_cross(self, other, 0, 0, radius * radius, &pairs);
+    }
 
     *pair = pairs.pair;
     return pairs.num;
