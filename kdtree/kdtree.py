@@ -95,9 +95,12 @@ class KDTree:
             num,
             int(sorted),
         )
-        offset = np.array(offset_p[:num + 1], dtype=np.intc)
-        index = np.array(index_p[:total], dtype=np.intc)
-        distance = np.array(distance_p[:total], dtype=np.float64)
+        offset = np.empty(num + 1, dtype=np.intc)
+        index = np.empty(total, dtype=np.intc)
+        distance = np.empty(total, dtype=np.float64)
+        ctypes.memmove(offset.ctypes.data, offset_p, (num + 1) * ctypes.sizeof(ctypes.c_int))
+        ctypes.memmove(index.ctypes.data, index_p, total * ctypes.sizeof(ctypes.c_int))
+        ctypes.memmove(distance.ctypes.data, distance_p, total * ctypes.sizeof(ctypes.c_double))
         _libc.free(ctypes.cast(offset_p, _void_p))
         _libc.free(ctypes.cast(index_p, _void_p))
         _libc.free(ctypes.cast(distance_p, _void_p))
@@ -112,9 +115,10 @@ class KDTree:
         other_ptr = other._ptr if other is not None else None
         pairs = _int2_p()
         total = _lib.kdtree_pairs(self._ptr, other_ptr, radius, ctypes.byref(pairs))
-        result = {(pairs[i][0], pairs[i][1]) for i in range(total)}
+        result = np.empty((total, 2), dtype=np.intc)
+        ctypes.memmove(result.ctypes.data, pairs, total * 2 * ctypes.sizeof(ctypes.c_int))
         _libc.free(ctypes.cast(pairs, ctypes.c_void_p))
-        return result
+        return set(result.view(np.dtype("i,i")).reshape(-1).tolist())
 
     def counts(self, radius, other=None, cumulative=True):
         other_ptr = other._ptr if other is not None else None
