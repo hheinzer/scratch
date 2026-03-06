@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum { LEAF_SIZE = 16, HEAP_THRESHOLD = 32 };
 
@@ -601,6 +602,103 @@ int kdtree_cross(const Kdtree *self, const Kdtree *other, double radius, int (**
 
     *pair = pairs.pair;
     return pairs.num;
+}
+
+static int lower_bound(const double *radius, int num, double dist2)
+{
+    int beg = 0;
+    int end = num;
+    while (beg < end) {
+        int mid = (beg + end) / 2;
+        if (radius[mid] * radius[mid] < dist2) {
+            beg = mid + 1;
+        }
+        else {
+            end = mid;
+        }
+    }
+    return beg;
+}
+
+static void search_counts(const Kdtree *self, int lhs, int rhs, const double *radius, long *count,
+                          int num)
+{
+    if (lhs > rhs) {
+        swap_int(&lhs, &rhs);
+    }
+
+    if (node_dist2(self, lhs, rhs) > radius[num - 1] * radius[num - 1]) {
+        return;
+    }
+
+    const Node *node_lhs = &self->node[lhs];
+
+    if (lhs == rhs) {
+        if (node_lhs->axis == -1) {
+            for (int i = node_lhs->child.leaf.beg; i < node_lhs->child.leaf.end; i++) {
+                for (int j = i + 1; j < node_lhs->child.leaf.end; j++) {
+                    double dist2 = 0;
+                    for (int k = 0; k < self->dim; k++) {
+                        double diff = get_value(self, i, k) - get_value(self, j, k);
+                        dist2 += diff * diff;
+                    }
+                    int bin = lower_bound(radius, num, dist2);
+                    if (bin < num) {
+                        count[bin] += 1;
+                    }
+                }
+            }
+            return;
+        }
+        int left = node_lhs->child.node.left;
+        int right = node_lhs->child.node.right;
+        search_counts(self, left, left, radius, count, num);
+        search_counts(self, left, right, radius, count, num);
+        search_counts(self, right, right, radius, count, num);
+        return;
+    }
+
+    const Node *node_rhs = &self->node[rhs];
+
+    if (node_lhs->axis == -1 && node_rhs->axis == -1) {
+        for (int i = node_lhs->child.leaf.beg; i < node_lhs->child.leaf.end; i++) {
+            for (int j = node_rhs->child.leaf.beg; j < node_rhs->child.leaf.end; j++) {
+                double dist2 = 0;
+                for (int k = 0; k < self->dim; k++) {
+                    double diff = get_value(self, i, k) - get_value(self, j, k);
+                    dist2 += diff * diff;
+                }
+                int bin = lower_bound(radius, num, dist2);
+                if (bin < num) {
+                    count[bin] += 1;
+                }
+            }
+        }
+        return;
+    }
+
+    if (node_lhs->axis == -1 || (node_rhs->axis != -1 && node_rhs->num >= node_lhs->num)) {
+        search_counts(self, lhs, node_rhs->child.node.left, radius, count, num);
+        search_counts(self, lhs, node_rhs->child.node.right, radius, count, num);
+    }
+    else {
+        search_counts(self, node_lhs->child.node.left, rhs, radius, count, num);
+        search_counts(self, node_lhs->child.node.right, rhs, radius, count, num);
+    }
+}
+
+void kdtree_counts(const Kdtree *self, const double *radius, long *count, int num, int cumulative)
+{
+    assert(self && radius && num >= 1 && count);
+
+    memset(count, 0, (size_t)num * sizeof(*count));
+    search_counts(self, 0, 0, radius, count, num);
+
+    if (cumulative) {
+        for (int i = 1; i < num; i++) {
+            count[i] += count[i - 1];
+        }
+    }
 }
 
 void kdtree_dump(const Kdtree *self, const char *fname)

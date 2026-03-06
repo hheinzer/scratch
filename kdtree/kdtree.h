@@ -28,5 +28,9 @@ int kdtree_pairs(const Kdtree *self, double radius, int (**pair)[2]);
 // the same dimension. Pairs are written to `*pair`. Caller must free. Returns total pair count.
 int kdtree_cross(const Kdtree *self, const Kdtree *other, double radius, int (**pair)[2]);
 
+// For each `radius[k]` (must be sorted in ascending order), `count[k]` is the number of unique
+// pairs with distance at most `radius[k]`. If not `cumulative`, counts are per-shell.
+void kdtree_counts(const Kdtree *self, const double *radius, long *count, int num, int cumulative);
+
 // Dump the tree structure to disk.
 void kdtree_dump(const Kdtree *self, const char *fname);

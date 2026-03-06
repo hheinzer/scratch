@@ -15,6 +15,7 @@ _int2_pp = ctypes.POINTER(_int2_p)
 
 _int_np = ndpointer(dtype=np.intc, flags="C")
 _f64_np = ndpointer(dtype=np.float64, flags="C")
+_i64_np = ndpointer(dtype=np.int64, flags="C")
 
 _lib.kdtree_init.restype = _void_p
 _lib.kdtree_init.argtypes = [_f64_np, _int, _int, _int]
@@ -33,6 +34,9 @@ _lib.kdtree_pairs.argtypes = [_void_p, _f64, _int2_pp]
 
 _lib.kdtree_cross.restype = _int
 _lib.kdtree_cross.argtypes = [_void_p, _void_p, _f64, _int2_pp]
+
+_lib.kdtree_counts.restype = None
+_lib.kdtree_counts.argtypes = [_void_p, _f64_np, _i64_np, _int, _int]
 
 _lib.kdtree_dump.restype = None
 _lib.kdtree_dump.argtypes = [_void_p, ctypes.c_char_p]
@@ -84,6 +88,17 @@ class KDTree:
         result = {(pairs[i][0], pairs[i][1]) for i in range(total)}
         _libc.free(ctypes.cast(pairs, ctypes.c_void_p))
         return result
+
+    def counts(self, radius, cumulative=True):
+        radius = np.asarray(radius, dtype=np.float64)
+        scalar = radius.ndim == 0
+        radius = np.atleast_1d(radius)
+        order = np.argsort(radius)
+        sorted = np.ascontiguousarray(radius[order])
+        result = np.empty(len(sorted), dtype=np.int64)
+        _lib.kdtree_counts(self._ptr, sorted, result, len(sorted), int(cumulative))
+        result = result[np.argsort(order)]
+        return result[0].item() if scalar else result
 
     def dump(self, path):
         _lib.kdtree_dump(self._ptr, path.encode())

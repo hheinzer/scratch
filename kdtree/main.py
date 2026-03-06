@@ -42,6 +42,17 @@ def test_cross(tree, tree_ref, other, other_ref, radius):
     print("ok")
 
 
+def test_counts(tree, tree_ref, radii):
+    print(f"{"counts":10s}", end=" ")
+    # scipy counts N self-pairs (distance=0) and both orderings of each pair,
+    # so scipy_total = N + 2 * unique_pairs; recover unique_pairs accordingly.
+    scipy_total = tree_ref.count_neighbors(tree_ref, radii)
+    counts_ref = (scipy_total - tree_ref.n) // 2
+    assert np.array_equal(tree.counts(radii), counts_ref)
+    assert np.array_equal(tree.counts(radii, cumulative=False), np.diff(counts_ref, prepend=0))
+    print("ok")
+
+
 def main():
     rng = np.random.default_rng(42)
 
@@ -64,6 +75,7 @@ def main():
     test_nearest(tree, tree_ref, queries, num)
     test_radius(tree, tree_ref, queries, radius)
     test_pairs(tree, tree_ref, radius)
+    test_counts(tree, tree_ref, np.linspace(0.05, 0.3, 6))
     test_cross(tree, tree_ref, other, other_ref, radius)
 
 
