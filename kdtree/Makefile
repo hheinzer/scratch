@@ -16,7 +16,7 @@ CFLAGS += -O3 -march=native -flto=auto -DNDEBUG -Wno-unused
 all: main libkdtree.so
 
 clean:
-	@rm -rf main libkdtree.so
+	@rm -f main libkdtree.so
 
 test: libkdtree.so
 	@python test.py
