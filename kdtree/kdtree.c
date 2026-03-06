@@ -347,23 +347,26 @@ static void sort_results(int *index, double *distance, int num)
     }
 }
 
-int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int cap,
-                   int sorted)
+int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int num,
+                   int cap, int sorted)
 {
-    assert(self && point && index && distance && cap > 0);
+    assert(self && point && index && distance && num > 0 && cap > 0);
 
-    int num = 0;
-    search(self, 0, point, index, distance, &num, cap);
+    int found = 0;
+    for (long i = 0; i < num; i++) {
+        found = 0;
+        search(self, 0, &point[i * self->dim], &index[i * cap], &distance[i * cap], &found, cap);
 
-    for (int i = 0; i < num; i++) {
-        distance[i] = sqrt(distance[i]);
+        for (int j = 0; j < found; j++) {
+            distance[(i * cap) + j] = sqrt(distance[(i * cap) + j]);
+        }
+
+        if (sorted) {
+            sort_results(&index[i * cap], &distance[i * cap], found);
+        }
     }
 
-    if (sorted) {
-        sort_results(index, distance, num);
-    }
-
-    return num;
+    return found;
 }
 
 static void search_radius(const Kdtree *self, int idx, const double *point, double radius2,
@@ -397,23 +400,54 @@ static void search_radius(const Kdtree *self, int idx, const double *point, doub
     search_radius(self, node->child.node.right, point, radius2, index, distance, num, cap);
 }
 
-int kdtree_radius(const Kdtree *self, const double *point, double radius, int *index,
-                  double *distance, int cap, int sorted)
+int kdtree_radius(const Kdtree *self, const double *point, double radius, int **offset, int **index,
+                  double **distance, int num, int sorted)
 {
-    assert(self && point && radius >= 0 && index && distance && cap > 0);
+    assert(self && point && radius >= 0 && num > 0 && offset && index && distance);
 
-    int num = 0;
-    search_radius(self, 0, point, radius * radius, index, distance, &num, cap);
+    *offset = malloc((size_t)(num + 1) * sizeof(**offset));
+    assert(*offset);
 
-    if (sorted) {
-        int min = (num < cap) ? num : cap;
-        for (int i = (min / 2) - 1; i >= 0; i--) {
-            sift_down(index, distance, i, min);
+    int cap = num * self->leaf_size;
+    *index = malloc((size_t)cap * sizeof(**index));
+    assert(*index);
+
+    *distance = malloc((size_t)cap * sizeof(**distance));
+    assert(*distance);
+
+    int total = 0;
+    for (long i = 0; i < num; i++) {
+        (*offset)[i] = total;
+
+        int found;
+        int remaining = cap - total;
+        while (1) {
+            found = 0;
+            search_radius(self, 0, &point[i * self->dim], radius * radius, &(*index)[total],
+                          &(*distance)[total], &found, remaining);
+            if (found <= remaining) {
+                break;
+            }
+            cap = total + (2 * found);
+            *index = realloc(*index, (size_t)cap * sizeof(**index));
+            assert(*index);
+            *distance = realloc(*distance, (size_t)cap * sizeof(**distance));
+            assert(*distance);
+            remaining = cap - total;
         }
-        sort_results(index, distance, min);
+
+        if (sorted) {
+            for (int j = (found / 2) - 1; j >= 0; j--) {
+                sift_down(*index + total, *distance + total, j, found);
+            }
+            sort_results(*index + total, *distance + total, found);
+        }
+
+        total += found;
     }
 
-    return num;
+    (*offset)[num] = total;
+    return total;
 }
 
 static double node_dist2(const Kdtree *self, int lhs, int rhs)

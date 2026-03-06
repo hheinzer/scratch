@@ -9,6 +9,12 @@ _int = ctypes.c_int
 _f64 = ctypes.c_double
 _void_p = ctypes.c_void_p
 
+_int_p = ctypes.POINTER(_int)
+_int_pp = ctypes.POINTER(_int_p)
+
+_f64_p = ctypes.POINTER(_f64)
+_f64_pp = ctypes.POINTER(_f64_p)
+
 _int2 = _int * 2
 _int2_p = ctypes.POINTER(_int2)
 _int2_pp = ctypes.POINTER(_int2_p)
@@ -24,10 +30,10 @@ _lib.kdtree_deinit.restype = None
 _lib.kdtree_deinit.argtypes = [_void_p]
 
 _lib.kdtree_nearest.restype = _int
-_lib.kdtree_nearest.argtypes = [_void_p, _f64_np, _int_np, _f64_np, _int, _int]
+_lib.kdtree_nearest.argtypes = [_void_p, _f64_np, _int_np, _f64_np, _int, _int, _int]
 
 _lib.kdtree_radius.restype = _int
-_lib.kdtree_radius.argtypes = [_void_p, _f64_np, _f64, _int_np, _f64_np, _int, _int]
+_lib.kdtree_radius.argtypes = [_void_p, _f64_np, _f64, _int_pp, _int_pp, _f64_pp, _int, _int]
 
 _lib.kdtree_pairs.restype = _int
 _lib.kdtree_pairs.argtypes = [_void_p, _void_p, _f64, _int2_pp]
@@ -57,20 +63,50 @@ class KDTree:
 
     def nearest(self, point, cap=1, sorted=True):
         point = np.ascontiguousarray(point, dtype=np.float64)
-        index = np.empty(cap, dtype=np.intc)
-        distance = np.empty(cap, dtype=np.float64)
-        num = _lib.kdtree_nearest(self._ptr, point, index, distance, cap, int(sorted))
-        return index[:num], distance[:num]
+        single = point.ndim == 1
+        if single:
+            point = point[np.newaxis]
+        num = len(point)
+        index = np.empty((num, cap), dtype=np.intc)
+        distance = np.empty((num, cap), dtype=np.float64)
+        found = _lib.kdtree_nearest(self._ptr, point, index, distance, num, cap, int(sorted))
+        index = index[:, :found]
+        distance = distance[:, :found]
+        if single:
+            return index[0], distance[0]
+        return index, distance
 
-    def radius(self, point, radius, cap=64, sorted=False):
+    def radius(self, point, radius, sorted=False):
         point = np.ascontiguousarray(point, dtype=np.float64)
-        while True:
-            index = np.empty(cap, dtype=np.intc)
-            distance = np.empty(cap, dtype=np.float64)
-            num = _lib.kdtree_radius(self._ptr, point, radius, index, distance, cap, int(sorted))
-            if num <= cap:
-                return index[:num], distance[:num]
-            cap = num
+        single = point.ndim == 1
+        if single:
+            point = point[np.newaxis]
+        num = len(point)
+        offset_p = _int_p()
+        index_p = _int_p()
+        distance_p = _f64_p()
+        total = _lib.kdtree_radius(
+            self._ptr,
+            point,
+            radius,
+            ctypes.byref(offset_p),
+            ctypes.byref(index_p),
+            ctypes.byref(distance_p),
+            num,
+            int(sorted),
+        )
+        offset = np.array(offset_p[:num + 1], dtype=np.intc)
+        index = np.array(index_p[:total], dtype=np.intc)
+        distance = np.array(distance_p[:total], dtype=np.float64)
+        _libc.free(ctypes.cast(offset_p, _void_p))
+        _libc.free(ctypes.cast(index_p, _void_p))
+        _libc.free(ctypes.cast(distance_p, _void_p))
+        if single:
+            return index, distance
+        return [
+            (index[offset[i] : offset[i + 1]], distance[offset[i] : offset[i + 1]])
+            for i in range(num)
+        ]
 
     def pairs(self, radius, other=None):
         other_ptr = other._ptr if other is not None else None

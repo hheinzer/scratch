@@ -9,16 +9,18 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size);
 // Free all memory associated with the tree.
 void kdtree_deinit(Kdtree *self);
 
-// Find the nearest neighbors of `point`, writing up to `cap` results to `index` and `distance`.
-// If `sorted`, results are in ascending order. Returns the number of results.
-int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int cap,
-                   int sorted);
+// Find the nearest neighbors of `num` points, writing up to `cap` results per point to `index` and
+// `distance` in row-major order. If `sorted`, results are in ascending order per point. Returns the
+// number of results per point.
+int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int num,
+                   int cap, int sorted);
 
-// Find all points within `radius` of `point`, writing up to `cap` results to `index` and
-// `distance`. If `sorted`, results are in ascending order. Returns the total number of points found
-// (can be larger than `cap`).
-int kdtree_radius(const Kdtree *self, const double *point, double radius, int *index,
-                  double *distance, int cap, int sorted);
+// Find all points within `radius` of `num` points. Allocates and writes results in CSR format:
+// `(*offset)[i]` to `(*offset)[i+1]` indexes into `*index` and `*distance` for query `i`. If
+// `sorted`, results per point are in ascending order. Caller must free `*offset`, `*index`, and
+// `*distance`. Returns the total number of results.
+int kdtree_radius(const Kdtree *self, const double *point, double radius, int **offset, int **index,
+                  double **distance, int num, int sorted);
 
 // Find all pairs within `radius` using a dual-tree traversal. If `!other`, finds unique self-pairs;
 // otherwise finds pairs between `self` and `other` (must have same dimension). Pairs are written to

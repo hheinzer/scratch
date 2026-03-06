@@ -23,24 +23,37 @@ int main(int argc, char **argv)
         }
     }
 
-    int *query = malloc((size_t)num_queries * sizeof(*query));
+    int *query_index = malloc((size_t)num_queries * sizeof(*query_index));
+    assert(query_index);
+    for (int i = 0; i < num_queries; i++) {
+        query_index[i] = rand() % num_points;
+    }
+
+    double (*query)[dim] = malloc((size_t)num_queries * sizeof(*query));
     assert(query);
     for (int i = 0; i < num_queries; i++) {
-        query[i] = rand() % num_points;
+        for (int j = 0; j < dim; j++) {
+            query[i][j] = point[query_index[i]][j];
+        }
     }
+
+    int *index = malloc((size_t)num_queries * (size_t)cap * sizeof(*index));
+    assert(index);
+    double *distance = malloc((size_t)num_queries * (size_t)cap * sizeof(*distance));
+    assert(distance);
 
     clock_t beg_init = clock();
     Kdtree *tree = kdtree_init(*point, num_points, dim, leaf_size);
     clock_t end_init = clock();
 
     clock_t beg_query = clock();
-    for (int i = 0; i < num_queries; i++) {
-        int index[cap];
-        double distance[cap];
-        int num = kdtree_nearest(tree, point[query[i]], index, distance, cap, 1);
-        assert(num == cap && index[0] == query[i]);
-    }
+    int found = kdtree_nearest(tree, *query, index, distance, num_queries, cap, 1);
     clock_t end_query = clock();
+
+    assert(found == cap);
+    for (int i = 0; i < num_queries; i++) {
+        assert(index[(long)i * cap] == query_index[i]);
+    }
 
     double time_init = (double)(end_init - beg_init) / CLOCKS_PER_SEC;
     double time_query = (double)(end_query - beg_query) / CLOCKS_PER_SEC;
@@ -57,5 +70,8 @@ int main(int argc, char **argv)
     kdtree_deinit(tree);
 
     free(point);
+    free(query_index);
     free(query);
+    free(index);
+    free(distance);
 }

@@ -6,21 +6,20 @@ from kdtree import KDTree
 
 def test_nearest(tree, tree_ref, queries, num):
     print(f"{"nearest":10s}", end=" ")
-    for query in queries:
-        idx, dist = tree.nearest(query, num, sorted=True)
-        dist_ref, idx_ref = tree_ref.query(query, num)
-        assert np.array_equal(idx, idx_ref), "index mismatch"
-        assert np.allclose(dist, dist_ref), "distance mismatch"
+    idx, dist = tree.nearest(queries, num, sorted=True)
+    dist_ref, idx_ref = tree_ref.query(queries, num)
+    assert np.array_equal(idx, idx_ref), "index mismatch"
+    assert np.allclose(dist, dist_ref), "distance mismatch"
     print("passed")
 
 
 def test_radius(tree, tree_ref, queries, radius):
     print(f"{"radius":10s}", end=" ")
-    for query in queries:
-        idx, dist = tree.radius(query, radius, sorted=True)
-        idx_ref = tree_ref.query_ball_point(query, radius)
-        assert set(idx.tolist()) == set(idx_ref), "index mismatch"
-        assert np.all(dist[:-1] <= dist[1:]), "not sorted"
+    results = tree.radius(queries, radius, sorted=True)
+    results_ref = tree_ref.query_ball_point(queries, radius)
+    for (idx_i, dist_i), idx_ref in zip(results, results_ref):
+        assert set(idx_i.tolist()) == set(idx_ref), "index mismatch"
+        assert np.all(dist_i[:-1] <= dist_i[1:]), "not sorted"
     print("passed")
 
 
