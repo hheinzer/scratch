@@ -10,7 +10,7 @@ enum { LEAF_SIZE = 16, HEAP_THRESHOLD = 32 };
 
 typedef struct {
     int num;       // number of points in subtree
-    int axis;      // split axis; -1 => leaf
+    int axis;      // split axis; -1 => leaf, otherwise node
     double value;  // split value
     union {
         struct {
@@ -340,9 +340,9 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
 static void sort_results(int *index, double *distance, int num)
 {
     while (num > 1) {
-        swap_int(&index[0], &index[num - 1]);
-        swap_double(&distance[0], &distance[num - 1]);
         num -= 1;
+        swap_int(&index[0], &index[num]);
+        swap_double(&distance[0], &distance[num]);
         sift_down(index, distance, 0, num);
     }
 }
@@ -528,7 +528,7 @@ static void search_pairs(const Kdtree *self, int lhs, int rhs, double radius2, P
     }
 }
 
-static double cross_dist2(const Kdtree *self, const Kdtree *other, int idx_self, int idx_other)
+static double other_dist2(const Kdtree *self, const Kdtree *other, int idx_self, int idx_other)
 {
     const Rect *bbox_self = get_bbox(self, idx_self);
     const Rect *bbox_other = get_bbox(other, idx_other);
@@ -546,10 +546,10 @@ static double cross_dist2(const Kdtree *self, const Kdtree *other, int idx_self,
     return dist2;
 }
 
-static void search_cross(const Kdtree *self, const Kdtree *other, int idx_self, int idx_other,
-                         double radius2, Pairs *pairs)
+static void search_pairs_other(const Kdtree *self, const Kdtree *other, int idx_self, int idx_other,
+                               double radius2, Pairs *pairs)
 {
-    if (cross_dist2(self, other, idx_self, idx_other) > radius2) {
+    if (other_dist2(self, other, idx_self, idx_other) > radius2) {
         return;
     }
 
@@ -573,12 +573,12 @@ static void search_cross(const Kdtree *self, const Kdtree *other, int idx_self, 
     }
 
     if (node_self->axis == -1 || (node_other->axis != -1 && node_other->num >= node_self->num)) {
-        search_cross(self, other, idx_self, node_other->child.node.left, radius2, pairs);
-        search_cross(self, other, idx_self, node_other->child.node.right, radius2, pairs);
+        search_pairs_other(self, other, idx_self, node_other->child.node.left, radius2, pairs);
+        search_pairs_other(self, other, idx_self, node_other->child.node.right, radius2, pairs);
     }
     else {
-        search_cross(self, other, node_self->child.node.left, idx_other, radius2, pairs);
-        search_cross(self, other, node_self->child.node.right, idx_other, radius2, pairs);
+        search_pairs_other(self, other, node_self->child.node.left, idx_other, radius2, pairs);
+        search_pairs_other(self, other, node_self->child.node.right, idx_other, radius2, pairs);
     }
 }
 
@@ -592,7 +592,7 @@ int kdtree_pairs(const Kdtree *self, const Kdtree *other, double radius, int (**
     }
     else {
         assert(self->dim == other->dim);
-        search_cross(self, other, 0, 0, radius * radius, &pairs);
+        search_pairs_other(self, other, 0, 0, radius * radius, &pairs);
     }
 
     *pair = pairs.pair;
@@ -682,12 +682,58 @@ static void search_counts(const Kdtree *self, int lhs, int rhs, const double *ra
     }
 }
 
-void kdtree_counts(const Kdtree *self, const double *radius, long *count, int num, int cumulative)
+static void search_counts_other(const Kdtree *self, const Kdtree *other, int idx_self,
+                                int idx_other, const double *radius, long *count, int num)
+{
+    if (other_dist2(self, other, idx_self, idx_other) > radius[num - 1] * radius[num - 1]) {
+        return;
+    }
+
+    const Node *node_self = &self->node[idx_self];
+    const Node *node_other = &other->node[idx_other];
+
+    if (node_self->axis == -1 && node_other->axis == -1) {
+        for (int i = node_self->child.leaf.beg; i < node_self->child.leaf.end; i++) {
+            for (int j = node_other->child.leaf.beg; j < node_other->child.leaf.end; j++) {
+                double dist2 = 0;
+                for (int k = 0; k < self->dim; k++) {
+                    double diff = get_value(self, i, k) - get_value(other, j, k);
+                    dist2 += diff * diff;
+                }
+                int bin = lower_bound(radius, num, dist2);
+                if (bin < num) {
+                    count[bin] += 1;
+                }
+            }
+        }
+        return;
+    }
+
+    if (node_self->axis == -1 || (node_other->axis != -1 && node_other->num >= node_self->num)) {
+        search_counts_other(self, other, idx_self, node_other->child.node.left, radius, count, num);
+        search_counts_other(self, other, idx_self, node_other->child.node.right, radius, count,
+                            num);
+    }
+    else {
+        search_counts_other(self, other, node_self->child.node.left, idx_other, radius, count, num);
+        search_counts_other(self, other, node_self->child.node.right, idx_other, radius, count,
+                            num);
+    }
+}
+
+void kdtree_counts(const Kdtree *self, const Kdtree *other, const double *radius, long *count,
+                   int num, int cumulative)
 {
     assert(self && radius && num >= 1 && count);
 
     memset(count, 0, (size_t)num * sizeof(*count));
-    search_counts(self, 0, 0, radius, count, num);
+    if (!other) {
+        search_counts(self, 0, 0, radius, count, num);
+    }
+    else {
+        assert(self->dim == other->dim);
+        search_counts_other(self, other, 0, 0, radius, count, num);
+    }
 
     if (cumulative) {
         for (int i = 1; i < num; i++) {

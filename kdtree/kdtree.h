@@ -20,14 +20,16 @@ int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *
 int kdtree_radius(const Kdtree *self, const double *point, double radius, int *index,
                   double *distance, int cap, int sorted);
 
-// Find all pairs within `radius` using a dual-tree traversal. If `other` is 0, finds unique
-// self-pairs; otherwise finds cross-pairs between `self` and `other` (must have same dimension).
-// Pairs are written to `*pair`. Caller must free. Returns total pair count.
+// Find all pairs within `radius` using a dual-tree traversal. If `!other`, finds unique self-pairs;
+// otherwise finds pairs between `self` and `other` (must have same dimension). Pairs are written to
+// `*pair`. Caller must free. Returns total pair count.
 int kdtree_pairs(const Kdtree *self, const Kdtree *other, double radius, int (**pair)[2]);
 
 // For each `radius[k]` (must be sorted in ascending order), `count[k]` is the number of unique
-// pairs with distance at most `radius[k]`. If not `cumulative`, counts are per-shell.
-void kdtree_counts(const Kdtree *self, const double *radius, long *count, int num, int cumulative);
+// pairs with distance at most `radius[k]`. If `!other`, counts self-pairs; otherwise counts pairs
+// between `self` and `other` (must have same dimension). If not `cumulative`, counts are per-shell.
+void kdtree_counts(const Kdtree *self, const Kdtree *other, const double *radius, long *count,
+                   int num, int cumulative);
 
 // Dump the tree structure to disk.
 void kdtree_dump(const Kdtree *self, const char *fname);

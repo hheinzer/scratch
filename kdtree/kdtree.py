@@ -33,7 +33,7 @@ _lib.kdtree_pairs.restype = _int
 _lib.kdtree_pairs.argtypes = [_void_p, _void_p, _f64, _int2_pp]
 
 _lib.kdtree_counts.restype = None
-_lib.kdtree_counts.argtypes = [_void_p, _f64_np, _i64_np, _int, _int]
+_lib.kdtree_counts.argtypes = [_void_p, _void_p, _f64_np, _i64_np, _int, _int]
 
 _lib.kdtree_dump.restype = None
 _lib.kdtree_dump.argtypes = [_void_p, ctypes.c_char_p]
@@ -80,14 +80,15 @@ class KDTree:
         _libc.free(ctypes.cast(pairs, ctypes.c_void_p))
         return result
 
-    def counts(self, radius, cumulative=True):
+    def counts(self, radius, other=None, cumulative=True):
+        other_ptr = other._ptr if other is not None else None
         radius = np.asarray(radius, dtype=np.float64)
         scalar = radius.ndim == 0
         radius = np.atleast_1d(radius)
         order = np.argsort(radius)
         sorted = np.ascontiguousarray(radius[order])
         result = np.empty(len(sorted), dtype=np.int64)
-        _lib.kdtree_counts(self._ptr, sorted, result, len(sorted), int(cumulative))
+        _lib.kdtree_counts(self._ptr, other_ptr, sorted, result, len(sorted), int(cumulative))
         result = result[np.argsort(order)]
         return result[0].item() if scalar else result
 
