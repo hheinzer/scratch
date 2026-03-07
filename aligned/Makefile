@@ -1,6 +1,6 @@
 CC = gcc
 LDLIBS =
-CFLAGS = -std=c99 -g3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion
+CFLAGS = -std=c99 -g3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
 
 CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 

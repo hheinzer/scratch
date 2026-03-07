@@ -28,10 +28,10 @@ enum { ALIGNMENT = 64 };
 typedef struct {
     void *base;
     size_t bytes;
-    size_t alignment;
+    int alignment;
 } Header;
 
-void *aligned_malloc(int num, size_t size, size_t alignment)
+void *aligned_malloc(int num, int size, int alignment)
 {
     assert(num >= 0 && size > 0 && (alignment & (alignment - 1)) == 0);
 
@@ -63,14 +63,14 @@ void *aligned_malloc(int num, size_t size, size_t alignment)
     return ptr;
 }
 
-void *aligned_calloc(int num, size_t size, size_t alignment)
+void *aligned_calloc(int num, int size, int alignment)
 {
     assert(num >= 0 && size > 0 && (alignment & (alignment - 1)) == 0);
     void *ptr = aligned_malloc(num, size, alignment);
     return ptr ? memset(ptr, 0, (size_t)num * size) : 0;
 }
 
-void *aligned_realloc(void *ptr, int num, size_t size, size_t alignment)
+void *aligned_realloc(void *ptr, int num, int size, int alignment)
 {
     assert(num >= 0 && size > 0 && (alignment & (alignment - 1)) == 0);
 
@@ -86,7 +86,7 @@ void *aligned_realloc(void *ptr, int num, size_t size, size_t alignment)
     MAKE_REGION_ADDRESSABLE((char *)ptr - sizeof(Header), sizeof(Header));
 
     size_t old_bytes = ((Header *)ptr)[-1].bytes;
-    size_t old_alignment = ((Header *)ptr)[-1].alignment;
+    int old_alignment = ((Header *)ptr)[-1].alignment;
 
     if (alignment == 0) {
         alignment = old_alignment;

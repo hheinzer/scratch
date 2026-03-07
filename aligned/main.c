@@ -11,7 +11,7 @@ static int is_aligned(void *ptr, size_t alignment)
 
 int main(void)
 {
-    for (size_t alignment = 1; alignment <= 1024; alignment *= 2) {
+    for (int alignment = 1; alignment <= 1024; alignment *= 2) {
         // aligned_malloc: correct alignment
         int *ptr1 = aligned_malloc(10, sizeof(*ptr1), alignment);
         assert(ptr1 && is_aligned(ptr1, alignment));
