@@ -165,17 +165,17 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size)
     self->leaf_size = leaf_size ? leaf_size : LEAF_SIZE;
     self->point = point;
 
-    self->index = malloc((size_t)num * sizeof(*self->index));
+    self->index = malloc(num * sizeof(*self->index));
     assert(self->index);
     for (int i = 0; i < num; i++) {
         self->index[i] = i;
     }
 
     self->num_nodes = compute_size(self, num);
-    self->node = malloc((size_t)self->num_nodes * sizeof(*self->node));
+    self->node = malloc(self->num_nodes * sizeof(*self->node));
     assert(self->node);
 
-    self->bbox = malloc((size_t)self->num_nodes * (size_t)dim * sizeof(*self->bbox));
+    self->bbox = malloc((size_t)self->num_nodes * dim * sizeof(*self->bbox));
     assert(self->bbox);
 
     int next = 0;
@@ -405,14 +405,14 @@ int kdtree_radius(const Kdtree *self, const double *point, double radius, int **
 {
     assert(self && point && radius >= 0 && num > 0 && offset && index && distance);
 
-    *offset = malloc((size_t)(num + 1) * sizeof(**offset));
+    *offset = malloc((num + 1) * sizeof(**offset));
     assert(*offset);
 
     int cap = num * self->leaf_size;
-    *index = malloc((size_t)cap * sizeof(**index));
+    *index = malloc(cap * sizeof(**index));
     assert(*index);
 
-    *distance = malloc((size_t)cap * sizeof(**distance));
+    *distance = malloc(cap * sizeof(**distance));
     assert(*distance);
 
     int total = 0;
@@ -429,9 +429,9 @@ int kdtree_radius(const Kdtree *self, const double *point, double radius, int **
                 break;
             }
             cap = total + (2 * found);
-            *index = realloc(*index, (size_t)cap * sizeof(**index));
+            *index = realloc(*index, cap * sizeof(**index));
             assert(*index);
-            *distance = realloc(*distance, (size_t)cap * sizeof(**distance));
+            *distance = realloc(*distance, cap * sizeof(**distance));
             assert(*distance);
             remaining = cap - total;
         }
@@ -478,7 +478,7 @@ static void pair_push(Pairs *pairs, int lhs, int rhs)
 {
     if (pairs->num == pairs->cap) {
         int new_cap = pairs->cap > 0 ? pairs->cap * 2 : 1;
-        int (*tmp)[2] = realloc(pairs->pair, (size_t)new_cap * sizeof(*tmp));
+        int (*tmp)[2] = realloc(pairs->pair, new_cap * sizeof(*tmp));
         assert(tmp);
         pairs->pair = tmp;
         pairs->cap = new_cap;
@@ -760,7 +760,7 @@ void kdtree_counts(const Kdtree *self, const Kdtree *other, const double *radius
 {
     assert(self && radius && num >= 1 && count);
 
-    memset(count, 0, (size_t)num * sizeof(*count));
+    memset(count, 0, num * sizeof(*count));
     if (!other) {
         search_counts(self, 0, 0, radius, count, num);
     }
@@ -787,7 +787,7 @@ void kdtree_dump(const Kdtree *self, const char *fname)
     fprintf(file, "# kdtree dim=%d nodes=%d\n", self->dim, num_nodes);
     fprintf(file, "# idx num axis value left right beg end depth bbox_min bbox_max\n");
 
-    int *depth = calloc((size_t)num_nodes, sizeof(*depth));
+    int *depth = calloc(num_nodes, sizeof(*depth));
     assert(depth);
     for (int i = 0; i < num_nodes; i++) {
         const Node *node = &self->node[i];
