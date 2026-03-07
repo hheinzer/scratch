@@ -50,13 +50,20 @@ Benchmarked against `scipy.spatial.KDTree` on 2M points in 3D with a leaf size o
 neighbor search and radius search use 200K query points; pair and count operations run on the full
 2M-point tree with a radius of 0.02.
 
-| Operation |  kdtree |     scipy | speedup |
-| :-------- | ------: | --------: | ------: |
-| init      |  9.675s |    9.463s |    1.0x |
-| nearest   |  9.933s |   10.645s |    1.1x |
-| radius    |  9.228s |   13.018s |    1.4x |
-| pairs     | 10.729s |   15.646s |    1.5x |
-| counts    | 11.592s |   44.584s |    3.8x |
+| Operation               | kdtree |   scipy | speedup |
+| :---------------------- | -----: | ------: | ------: |
+| init                    | 6.206s |  6.218s |    1.0x |
+| nearest                 | 8.131s |  8.501s |    1.0x |
+| radius sorted           | 7.284s |  9.221s |    1.3x |
+| radius unsorted         | 7.930s |  8.879s |    1.1x |
+| pairs set               | 6.165s |  9.673s |    1.6x |
+| pairs ndarray           | 3.442s |  5.570s |    1.6x |
+| cross-pairs set         | 3.978s |  6.244s |    1.6x |
+| cross-pairs ndarray     | 3.494s |  6.273s |    1.8x |
+| counts cumulative       | 6.165s | 22.921s |    3.7x |
+| counts per shell        | 6.158s | 17.866s |    2.9x |
+| cross-counts cumulative | 4.848s |  7.894s |    1.6x |
+| cross-counts shell      | 4.825s |  6.601s |    1.4x |
 
 Run `make perf` to reproduce. Pair and count operations benefit most from dual-tree pruning.
 
