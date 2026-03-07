@@ -7,6 +7,28 @@ from kdtree import KDTree
 
 rng = np.random.default_rng(0)
 
+LIGHT = dict(
+    style="default",
+    point="grey",
+    ec="darkorange",
+    fc="none",
+    line="darkorange",
+    query="purple",
+    bar="purple",
+    suffix="light",
+)
+
+DARK = dict(
+    style="dark_background",
+    point="#888888",
+    ec="orange",
+    fc="none",
+    line="orange",
+    query="mediumpurple",
+    bar="mediumpurple",
+    suffix="dark",
+)
+
 
 def create_uniform(num=1000, dim=2):
     return rng.uniform(-1, 1, (num, dim))
@@ -63,89 +85,101 @@ def load_dump(tree):
     )
 
 
-def plot_tree(points, dump):
-    _, ax = plt.subplots()
-    depths = dump["depth"]
-    cmap = plt.get_cmap("Oranges")
-    for lo, hi, depth in zip(dump["bbox_min"], dump["bbox_max"], depths):
-        color = cmap(0.5 * depth / depths.max())
-        ax.add_patch(patches.Rectangle(lo, hi[0] - lo[0], hi[1] - lo[1], fc=color))
-    ax.scatter(points[:, 0], points[:, 1], s=2, c="purple", zorder=2)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_aspect("equal")
-    plt.savefig("fig/tree.png", bbox_inches="tight")
+def plot_tree(points, dump, theme):
+    with plt.style.context(theme["style"]):
+        _, ax = plt.subplots()
+        depths = dump["depth"]
+        cmap = plt.get_cmap("Oranges")
+        for lo, hi, depth in zip(dump["bbox_min"], dump["bbox_max"], depths):
+            color = cmap(0.5 * depth / depths.max())
+            ax.add_patch(patches.Rectangle(lo, hi[0] - lo[0], hi[1] - lo[1], fc=color))
+        ax.scatter(points[:, 0], points[:, 1], s=2, c=theme["query"], zorder=2)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_aspect("equal")
+        plt.savefig(f"fig/tree-{theme['suffix']}.svg", bbox_inches="tight", transparent=True)
+        plt.close()
 
 
-def plot_nearest(points, tree, query=(0, 0), cap=16):
+def plot_nearest(points, tree, theme, query=(0, 0), cap=16):
     idx, _ = tree.nearest(query, cap=cap)
 
-    _, ax = plt.subplots()
-    ax.scatter(points[:, 0], points[:, 1], s=2, c="grey", zorder=2)
-    ax.scatter(points[idx, 0], points[idx, 1], s=20, ec="orange", fc="white", zorder=1)
-    for nb in points[idx]:
-        ax.plot([query[0], nb[0]], [query[1], nb[1]], c="orange", lw=0.5, zorder=0)
-    ax.scatter(query[0], query[1], s=80, c="purple", marker="*", zorder=3)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_aspect("equal")
-    plt.savefig("fig/nearest.png", bbox_inches="tight")
+    with plt.style.context(theme["style"]):
+        _, ax = plt.subplots()
+        ax.scatter(points[:, 0], points[:, 1], s=2, c=theme["point"], zorder=2)
+        ax.scatter(points[idx, 0], points[idx, 1], s=20, ec=theme["ec"], fc=theme["fc"], zorder=1)
+        for nb in points[idx]:
+            ax.plot([query[0], nb[0]], [query[1], nb[1]], c=theme["line"], lw=0.5, zorder=0)
+        ax.scatter(query[0], query[1], s=80, c=theme["query"], marker="*", zorder=3)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_aspect("equal")
+        plt.savefig(f"fig/nearest-{theme['suffix']}.svg", bbox_inches="tight", transparent=True)
+        plt.close()
 
 
-def plot_radius(points, tree, query=(0, 0), radius=0.2):
+def plot_radius(points, tree, theme, query=(0, 0), radius=0.2):
     idx, _ = tree.radius(query, radius)
 
-    _, ax = plt.subplots()
-    ax.scatter(points[:, 0], points[:, 1], s=2, c="grey", zorder=2)
-    ax.scatter(points[idx, 0], points[idx, 1], s=20, ec="orange", fc="white", zorder=1)
-    ax.add_patch(patches.Circle(query, radius, fill=False, linestyle="--", zorder=3))
-    ax.scatter(query[0], query[1], s=80, c="purple", marker="*", zorder=4)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_aspect("equal")
-    plt.savefig("fig/radius.png", bbox_inches="tight")
+    with plt.style.context(theme["style"]):
+        _, ax = plt.subplots()
+        ax.scatter(points[:, 0], points[:, 1], s=2, c=theme["point"], zorder=2)
+        ax.scatter(points[idx, 0], points[idx, 1], s=20, ec=theme["ec"], fc=theme["fc"], zorder=1)
+        ax.add_patch(patches.Circle(query, radius, fill=False, linestyle="--", zorder=3))
+        ax.scatter(query[0], query[1], s=80, c=theme["query"], marker="*", zorder=4)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_aspect("equal")
+        plt.savefig(f"fig/radius-{theme['suffix']}.svg", bbox_inches="tight", transparent=True)
+        plt.close()
 
 
-def plot_pairs(points, tree, radius=0.05):
+def plot_pairs(points, tree, theme, radius=0.05):
     pairs = tree.pairs(radius)
 
-    _, ax = plt.subplots()
-    ax.scatter(points[:, 0], points[:, 1], s=2, c="grey", zorder=2)
-    for i, j in pairs:
-        ax.plot(
-            [points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]], c="orange", lw=0.5, zorder=1
-        )
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_aspect("equal")
-    plt.savefig("fig/pairs.png", bbox_inches="tight")
+    with plt.style.context(theme["style"]):
+        _, ax = plt.subplots()
+        ax.scatter(points[:, 0], points[:, 1], s=2, c=theme["point"], zorder=2)
+        for i, j in pairs:
+            ax.plot(
+                [points[i, 0], points[j, 0]], [points[i, 1], points[j, 1]],
+                c=theme["line"], lw=0.5, zorder=1,
+            )
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_aspect("equal")
+        plt.savefig(f"fig/pairs-{theme['suffix']}.svg", bbox_inches="tight", transparent=True)
+        plt.close()
 
 
-def plot_counts(tree, max_radius=1):
+def plot_counts(tree, theme, max_radius=1):
     radii = np.linspace(0, max_radius, 100)
     shell = tree.counts(radii, cumulative=False)
     cumul = tree.counts(radii, cumulative=True)
 
-    _, ax1 = plt.subplots()
-    ax1.bar(
-        radii,
-        shell,
-        width=radii[1] - radii[0],
-        align="edge",
-        color="purple",
-        alpha=0.5,
-        label="per shell",
-    )
-    ax2 = ax1.twinx()
-    ax2.plot(radii, cumul, c="orange", label="cumulative")
-    ax1.set_xlabel("radius")
-    ax1.set_ylabel("pairs per shell")
-    ax2.set_ylabel("cumulative pairs")
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2)
-    ax1.set_box_aspect(1)
-    plt.savefig("fig/counts.png", bbox_inches="tight")
+    with plt.style.context(theme["style"]):
+        _, ax1 = plt.subplots()
+        ax1.bar(
+            radii,
+            shell,
+            width=radii[1] - radii[0],
+            align="edge",
+            color=theme["bar"],
+            alpha=0.5,
+            label="per shell",
+        )
+        ax2 = ax1.twinx()
+        ax2.plot(radii, cumul, c=theme["line"], label="cumulative")
+        ax1.set_xlabel("radius")
+        ax1.set_ylabel("pairs per shell")
+        ax2.set_ylabel("cumulative pairs")
+
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2)
+        ax1.set_box_aspect(1)
+        plt.savefig(f"fig/counts-{theme['suffix']}.svg", bbox_inches="tight", transparent=True)
+        plt.close()
 
 
 def main():
@@ -156,11 +190,12 @@ def main():
     tree = KDTree(points, leaf_size=8)
     dump = load_dump(tree)
 
-    plot_tree(points, dump)
-    plot_nearest(points, tree)
-    plot_radius(points, tree)
-    plot_pairs(points, tree)
-    plot_counts(tree)
+    for theme in (LIGHT, DARK):
+        plot_tree(points, dump, theme)
+        plot_nearest(points, tree, theme)
+        plot_radius(points, tree, theme)
+        plot_pairs(points, tree, theme)
+        plot_counts(tree, theme)
 
 
 if __name__ == "__main__":

@@ -15,7 +15,10 @@ controls how many points are stored in leaf nodes (0 uses the default of 16). On
 distance is supported. The tree holds a pointer to the point data and does not copy it; the data
 must remain valid for the lifetime of the tree.
 
-![tree](fig/tree.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="fig/tree-dark.svg">
+  <img src="fig/tree-light.svg">
+</picture>
 
 **`kdtree_deinit`** Free all memory associated with the tree.
 
@@ -23,26 +26,38 @@ must remain valid for the lifetime of the tree.
 caller-allocated arrays of size k. Results can optionally be sorted in ascending distance order.
 Returns the number of results found.
 
-![nearest](fig/nearest.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="fig/nearest-dark.svg">
+  <img src="fig/nearest-light.svg">
+</picture>
 
 **`kdtree_radius`** Find all points within a given radius of a query point. Writes up to a
 caller-specified number of results. Returns the total count, which may exceed the buffer size.
 Results can optionally be sorted in ascending distance order.
 
-![radius](fig/radius.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="fig/radius-dark.svg">
+  <img src="fig/radius-light.svg">
+</picture>
 
 **`kdtree_pairs`** Find all pairs within a given radius using dual-tree traversal. If no second tree
 is given, finds unique self-pairs; otherwise finds cross-pairs between two trees of the same
 dimension. Allocates and writes results to a caller-owned pointer; caller must free. Returns the
 pair count.
 
-![pairs](fig/pairs.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="fig/pairs-dark.svg">
+  <img src="fig/pairs-light.svg">
+</picture>
 
 **`kdtree_counts`** Count pairs within a series of radii (must be sorted ascending). For each
 radius, writes the number of pairs whose distance does not exceed it. Counts can be cumulative or
 per shell (between consecutive radii). Supports self-pairs and cross-pairs between two trees.
 
-![counts](fig/counts.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="fig/counts-dark.svg">
+  <img src="fig/counts-light.svg">
+</picture>
 
 ## Performance
 
