@@ -111,13 +111,15 @@ class KDTree:
             for i in range(num)
         ]
 
-    def pairs(self, radius, other=None):
+    def pairs(self, radius, other=None, output_type="set"):
         other_ptr = other._ptr if other is not None else None
         pairs = _int2_p()
         total = _lib.kdtree_pairs(self._ptr, other_ptr, radius, ctypes.byref(pairs))
         result = np.empty((total, 2), dtype=np.intc)
         ctypes.memmove(result.ctypes.data, pairs, total * 2 * ctypes.sizeof(ctypes.c_int))
         _libc.free(ctypes.cast(pairs, ctypes.c_void_p))
+        if output_type == "ndarray":
+            return result
         return set(result.view(np.dtype("i,i")).reshape(-1).tolist())
 
     def counts(self, radius, other=None, cumulative=True):
