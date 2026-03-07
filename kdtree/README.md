@@ -44,6 +44,22 @@ per shell (between consecutive radii). Supports self-pairs and cross-pairs betwe
 
 ![counts](fig/counts.png)
 
+## Performance
+
+Benchmarked against `scipy.spatial.KDTree` on 2M points in 3D with a leaf size of 16. Nearest
+neighbor search and radius search use 200K query points; pair and count operations run on the full
+2M-point tree with a radius of 0.02.
+
+| Operation |  kdtree |     scipy | speedup |
+| :-------- | ------: | --------: | ------: |
+| init      |  9.675s |    9.463s |    1.0x |
+| nearest   |  9.933s |   10.645s |    1.1x |
+| radius    |  9.228s |   13.018s |    1.4x |
+| pairs     | 10.729s |   15.646s |    1.5x |
+| counts    | 11.592s |   44.584s |    3.8x |
+
+Run `make perf` to reproduce. Pair and count operations benefit most from dual-tree pruning.
+
 ## Implementation notes
 
 - Split axis is chosen as the dimension with the largest coordinate spread
