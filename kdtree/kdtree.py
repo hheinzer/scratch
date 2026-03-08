@@ -66,6 +66,8 @@ class KDTree:
         else:
             periodic_ptr = None
         self._ptr = _lib.kdtree_init(points, num, dim, leaf_size, periodic_ptr)
+        if periodic is not None and not self._ptr:
+            raise ValueError("point spread exceeds periodic box size")
 
     def __del__(self):
         if hasattr(self, "_ptr") and self._ptr:

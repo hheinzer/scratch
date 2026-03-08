@@ -187,7 +187,10 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size, const 
     if (periodic) {
         const Rect *root = get_bbox(self, 0);
         for (int i = 0; i < dim; i++) {
-            assert(root[i].max - root[i].min <= self->periodic[i]);
+            if (root[i].max - root[i].min > self->periodic[i]) {
+                kdtree_deinit(self);
+                return 0;
+            }
         }
     }
 
@@ -370,7 +373,7 @@ static void sort_results(int *index, double *distance, int num)
 int kdtree_nearest(const Kdtree *self, const double *point, int *index, double *distance, int num,
                    int cap, int sorted)
 {
-    assert(self && point && index && distance && num > 0 && cap > 0);
+    assert(self && point && index && distance && num > 0 && cap > 0 && cap <= self->num_points);
 
     int found = 0;
     for (long i = 0; i < num; i++) {
