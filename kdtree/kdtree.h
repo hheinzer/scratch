@@ -4,7 +4,7 @@ typedef struct kdtree Kdtree;
 
 // Build a k-d tree from `num` points of dimension `dim`. `leaf_size` controls the number of points
 // stored in leaf nodes (0 uses a default). `periodic[i]` is the periodic box length in dimension i
-// (pass 0 for non-periodic).
+// (pass 0 for non-periodic). Returns 0 if the point spread exceeds the periodic box size.
 Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size, const double *periodic);
 
 // Free all memory associated with the tree.
