@@ -83,7 +83,7 @@ neighbor search and radius search use 200K query points; pair and count operatio
 | cross-counts weighted   | 4.625s |  7.690s |    1.7x |
 
 
-Run `make perf` to reproduce. Pair and count operations benefit most from dual-tree pruning.
+Run `make bench` to reproduce. Pair and count operations benefit most from dual-tree pruning.
 
 ## Implementation notes
 

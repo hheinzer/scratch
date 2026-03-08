@@ -11,7 +11,7 @@ CFLAGS += -O3 -march=native -flto=auto -DNDEBUG -Wno-unused
 # profile
 #CFLAGS += -fno-omit-frame-pointer -fno-inline-functions
 
-.PHONY: all clean test perf
+.PHONY: all clean test bench
 
 all: main libkdtree.so
 
@@ -21,8 +21,8 @@ clean:
 test: libkdtree.so
 	@python test.py
 
-perf: libkdtree.so
-	@python perf.py
+bench: libkdtree.so
+	@python bench.py
 
 main: main.c kdtree.c kdtree.h
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@

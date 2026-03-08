@@ -15,27 +15,27 @@ def report(label, wtime, wtime_ref):
     print(f"{label:23s}  {wtime:6.3f}s  {wtime_ref:8.3f}s  {wtime_ref / wtime:6.1f}x")
 
 
-def perf_init(points, leaf_size):
+def bench_init(points, leaf_size):
     wtime, tree = bench(lambda: KDTree(points, leaf_size))
     wtime_ref, tree_ref = bench(lambda: ScipyKDTree(points, leaf_size))
     report("init", wtime, wtime_ref)
     return tree, tree_ref
 
 
-def perf_nearest(tree, tree_ref, queries, k):
+def bench_nearest(tree, tree_ref, queries, k):
     wtime, _ = bench(lambda: tree.nearest(queries, k))
     wtime_ref, _ = bench(lambda: tree_ref.query(queries, k))
     report("nearest", wtime, wtime_ref)
 
 
-def perf_radius(tree, tree_ref, queries, radius, sorted):
+def bench_radius(tree, tree_ref, queries, radius, sorted):
     label = "radius sorted" if sorted else "radius unsorted"
     wtime, _ = bench(lambda: tree.radius(queries, radius, sorted=sorted))
     wtime_ref, _ = bench(lambda: tree_ref.query_ball_point(queries, radius, return_sorted=sorted))
     report(label, wtime, wtime_ref)
 
 
-def perf_pairs(tree, tree_ref, radius, output_type, other=None, other_ref=None):
+def bench_pairs(tree, tree_ref, radius, output_type, other=None, other_ref=None):
     if other is None:
         label = "pairs set" if output_type == "set" else "pairs ndarray"
         wtime, _ = bench(lambda: tree.pairs(radius, output_type=output_type))
@@ -47,7 +47,7 @@ def perf_pairs(tree, tree_ref, radius, output_type, other=None, other_ref=None):
     report(label, wtime, wtime_ref)
 
 
-def perf_counts(tree, tree_ref, radii, cumulative, other=None, other_ref=None):
+def bench_counts(tree, tree_ref, radii, cumulative, other=None, other_ref=None):
     if other is None:
         label = "counts cumulative" if cumulative else "counts per shell"
         wtime, _ = bench(lambda: tree.counts(radii, cumulative=cumulative))
@@ -63,7 +63,7 @@ def perf_counts(tree, tree_ref, radii, cumulative, other=None, other_ref=None):
     report(label, wtime, wtime_ref)
 
 
-def perf_weighted(
+def bench_weighted(
     tree, tree_ref, radii, weight_self, other=None, other_ref=None, weight_other=None
 ):
     if other is None:
@@ -104,20 +104,20 @@ def main():
     weight_other = rng.uniform(size=num_queries)
 
     print(f"{'':23s}  {'kdtree':>7s}  {'scipy':>9s}  speedup")
-    tree, tree_ref = perf_init(points, leaf_size)
-    perf_nearest(tree, tree_ref, queries, cap)
-    perf_radius(tree, tree_ref, queries, radius, True)
-    perf_radius(tree, tree_ref, queries, radius, False)
-    perf_pairs(tree, tree_ref, radii[-1], "set")
-    perf_pairs(tree, tree_ref, radii[-1], "ndarray")
-    perf_pairs(tree, tree_ref, radii[-1], "set", other, other_ref)
-    perf_pairs(tree, tree_ref, radii[-1], "ndarray", other, other_ref)
-    perf_counts(tree, tree_ref, radii, True)
-    perf_counts(tree, tree_ref, radii, False)
-    perf_counts(tree, tree_ref, radii, True, other, other_ref)
-    perf_counts(tree, tree_ref, radii, False, other, other_ref)
-    perf_weighted(tree, tree_ref, radii, weight_self)
-    perf_weighted(tree, tree_ref, radii, weight_self, other, other_ref, weight_other)
+    tree, tree_ref = bench_init(points, leaf_size)
+    bench_nearest(tree, tree_ref, queries, cap)
+    bench_radius(tree, tree_ref, queries, radius, True)
+    bench_radius(tree, tree_ref, queries, radius, False)
+    bench_pairs(tree, tree_ref, radii[-1], "set")
+    bench_pairs(tree, tree_ref, radii[-1], "ndarray")
+    bench_pairs(tree, tree_ref, radii[-1], "set", other, other_ref)
+    bench_pairs(tree, tree_ref, radii[-1], "ndarray", other, other_ref)
+    bench_counts(tree, tree_ref, radii, True)
+    bench_counts(tree, tree_ref, radii, False)
+    bench_counts(tree, tree_ref, radii, True, other, other_ref)
+    bench_counts(tree, tree_ref, radii, False, other, other_ref)
+    bench_weighted(tree, tree_ref, radii, weight_self)
+    bench_weighted(tree, tree_ref, radii, weight_self, other, other_ref, weight_other)
 
 
 if __name__ == "__main__":
