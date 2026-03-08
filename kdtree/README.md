@@ -79,6 +79,9 @@ neighbor search and radius search use 200K query points; pair and count operatio
 | counts per shell        | 6.158s | 17.866s |    2.9x |
 | cross-counts cumulative | 4.848s |  7.894s |    1.6x |
 | cross-counts shell      | 4.825s |  6.601s |    1.4x |
+| counts weighted         | 6.400s | 22.187s |    3.5x |
+| cross-counts weighted   | 4.625s |  7.690s |    1.7x |
+
 
 Run `make perf` to reproduce. Pair and count operations benefit most from dual-tree pruning.
 

@@ -51,11 +51,35 @@ def perf_counts(tree, tree_ref, radii, cumulative, other=None, other_ref=None):
     if other is None:
         label = "counts cumulative" if cumulative else "counts per shell"
         wtime, _ = bench(lambda: tree.counts(radii, cumulative=cumulative))
-        wtime_ref, _ = bench(lambda: tree_ref.count_neighbors(tree_ref, radii, cumulative=cumulative))
+        wtime_ref, _ = bench(
+            lambda: tree_ref.count_neighbors(tree_ref, radii, cumulative=cumulative)
+        )
     else:
         label = "cross-counts cumulative" if cumulative else "cross-counts shell"
         wtime, _ = bench(lambda: tree.counts(radii, other=other, cumulative=cumulative))
-        wtime_ref, _ = bench(lambda: tree_ref.count_neighbors(other_ref, radii, cumulative=cumulative))
+        wtime_ref, _ = bench(
+            lambda: tree_ref.count_neighbors(other_ref, radii, cumulative=cumulative)
+        )
+    report(label, wtime, wtime_ref)
+
+
+def perf_weighted(
+    tree, tree_ref, radii, weight_self, other=None, other_ref=None, weight_other=None
+):
+    if other is None:
+        label = "counts weighted"
+        wtime, _ = bench(lambda: tree.counts_weighted(radii, weight_self))
+        wtime_ref, _ = bench(
+            lambda: tree_ref.count_neighbors(tree_ref, radii, weights=(weight_self, weight_self))
+        )
+    else:
+        label = "cross-counts weighted"
+        wtime, _ = bench(
+            lambda: tree.counts_weighted(radii, (weight_self, weight_other), other=other)
+        )
+        wtime_ref, _ = bench(
+            lambda: tree_ref.count_neighbors(other_ref, radii, weights=(weight_self, weight_other))
+        )
     report(label, wtime, wtime_ref)
 
 
@@ -76,19 +100,24 @@ def main():
     other = KDTree(queries, leaf_size)
     other_ref = ScipyKDTree(queries, leaf_size)
 
+    weight_self = rng.uniform(size=num_points)
+    weight_other = rng.uniform(size=num_queries)
+
     print(f"{'':23s}  {'kdtree':>7s}  {'scipy':>9s}  speedup")
     tree, tree_ref = perf_init(points, leaf_size)
     perf_nearest(tree, tree_ref, queries, cap)
-    perf_radius(tree, tree_ref, queries, radius, sorted=True)
-    perf_radius(tree, tree_ref, queries, radius, sorted=False)
-    perf_pairs(tree, tree_ref, radii[-1], output_type="set")
-    perf_pairs(tree, tree_ref, radii[-1], output_type="ndarray")
-    perf_pairs(tree, tree_ref, radii[-1], output_type="set", other=other, other_ref=other_ref)
-    perf_pairs(tree, tree_ref, radii[-1], output_type="ndarray", other=other, other_ref=other_ref)
-    perf_counts(tree, tree_ref, radii, cumulative=True)
-    perf_counts(tree, tree_ref, radii, cumulative=False)
-    perf_counts(tree, tree_ref, radii, cumulative=True, other=other, other_ref=other_ref)
-    perf_counts(tree, tree_ref, radii, cumulative=False, other=other, other_ref=other_ref)
+    perf_radius(tree, tree_ref, queries, radius, True)
+    perf_radius(tree, tree_ref, queries, radius, False)
+    perf_pairs(tree, tree_ref, radii[-1], "set")
+    perf_pairs(tree, tree_ref, radii[-1], "ndarray")
+    perf_pairs(tree, tree_ref, radii[-1], "set", other, other_ref)
+    perf_pairs(tree, tree_ref, radii[-1], "ndarray", other, other_ref)
+    perf_counts(tree, tree_ref, radii, True)
+    perf_counts(tree, tree_ref, radii, False)
+    perf_counts(tree, tree_ref, radii, True, other, other_ref)
+    perf_counts(tree, tree_ref, radii, False, other, other_ref)
+    perf_weighted(tree, tree_ref, radii, weight_self)
+    perf_weighted(tree, tree_ref, radii, weight_self, other, other_ref, weight_other)
 
 
 if __name__ == "__main__":

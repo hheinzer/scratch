@@ -41,6 +41,9 @@ _lib.kdtree_pairs.argtypes = [_void_p, _void_p, _f64, _int2_pp]
 _lib.kdtree_counts.restype = None
 _lib.kdtree_counts.argtypes = [_void_p, _void_p, _f64_np, _i64_np, _int, _int]
 
+_lib.kdtree_weighted.restype = None
+_lib.kdtree_weighted.argtypes = [_void_p, _void_p, _f64_p, _f64_p, _f64_np, _f64_np, _int, _int]
+
 _lib.kdtree_dump.restype = None
 _lib.kdtree_dump.argtypes = [_void_p, ctypes.c_char_p]
 
@@ -131,6 +134,41 @@ class KDTree:
         sorted = np.ascontiguousarray(radius[order])
         result = np.empty(len(sorted), dtype=np.int64)
         _lib.kdtree_counts(self._ptr, other_ptr, sorted, result, len(sorted), int(cumulative))
+        result = result[np.argsort(order)]
+        return result[0].item() if scalar else result
+
+    def counts_weighted(self, radius, weights, other=None, cumulative=True):
+        other_ptr = other._ptr if other is not None else None
+        if isinstance(weights, tuple):
+            weight_self, weight_other = weights
+        else:
+            weight_self, weight_other = weights, None
+        if weight_self is not None:
+            weight_self = np.ascontiguousarray(weight_self, dtype=np.float64)
+            weight_ptr = weight_self.ctypes.data_as(_f64_p)
+        else:
+            weight_ptr = None
+        if weight_other is not None:
+            weight_other = np.ascontiguousarray(weight_other, dtype=np.float64)
+            weight_other_ptr = weight_other.ctypes.data_as(_f64_p)
+        else:
+            weight_other_ptr = None
+        radius = np.asarray(radius, dtype=np.float64)
+        scalar = radius.ndim == 0
+        radius = np.atleast_1d(radius)
+        order = np.argsort(radius)
+        sorted = np.ascontiguousarray(radius[order])
+        result = np.empty(len(sorted), dtype=np.float64)
+        _lib.kdtree_weighted(
+            self._ptr,
+            other_ptr,
+            weight_ptr,
+            weight_other_ptr,
+            sorted,
+            result,
+            len(sorted),
+            int(cumulative),
+        )
         result = result[np.argsort(order)]
         return result[0].item() if scalar else result
 

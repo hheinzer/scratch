@@ -59,6 +59,26 @@ def test_counts(tree, tree_ref, radii, cumulative, other=None, other_ref=None):
     print("passed")
 
 
+def test_counts_weighted(
+    tree, tree_ref, radii, weight_self, other=None, other_ref=None, weight_other=None
+):
+    if other is None:
+        check("counts weighted")
+        result = tree.counts_weighted(radii, weight_self)
+        ref = tree_ref.count_neighbors(
+            tree_ref, radii, weights=(weight_self, weight_self), cumulative=True
+        )
+        ref = (ref - np.sum(weight_self**2)) / 2
+    else:
+        check("cross-counts weighted")
+        result = tree.counts_weighted(radii, (weight_self, weight_other), other=other)
+        ref = tree_ref.count_neighbors(
+            other_ref, radii, weights=(weight_self, weight_other), cumulative=True
+        )
+    assert np.allclose(result, ref), "weighted counts mismatch"
+    print("passed")
+
+
 def main():
     rng = np.random.default_rng(42)
 
@@ -79,17 +99,22 @@ def main():
     other = KDTree(queries, leaf_size)
     other_ref = ScipyKDTree(queries, leaf_size)
 
+    weight_self = rng.uniform(size=num_points)
+    weight_other = rng.uniform(size=num_queries)
+
     test_nearest(tree, tree_ref, queries, cap)
-    test_radius(tree, tree_ref, queries, radius, sorted=True)
-    test_radius(tree, tree_ref, queries, radius, sorted=False)
-    test_pairs(tree, tree_ref, radius, output_type="set")
-    test_pairs(tree, tree_ref, radius, output_type="ndarray")
-    test_pairs(tree, tree_ref, radius, output_type="set", other=other, other_ref=other_ref)
-    test_pairs(tree, tree_ref, radius, output_type="ndarray", other=other, other_ref=other_ref)
-    test_counts(tree, tree_ref, radii, cumulative=True)
-    test_counts(tree, tree_ref, radii, cumulative=False)
-    test_counts(tree, tree_ref, radii, cumulative=True, other=other, other_ref=other_ref)
-    test_counts(tree, tree_ref, radii, cumulative=False, other=other, other_ref=other_ref)
+    test_radius(tree, tree_ref, queries, radius, True)
+    test_radius(tree, tree_ref, queries, radius, False)
+    test_pairs(tree, tree_ref, radius, "set")
+    test_pairs(tree, tree_ref, radius, "ndarray")
+    test_pairs(tree, tree_ref, radius, "set", other, other_ref)
+    test_pairs(tree, tree_ref, radius, "ndarray", other, other_ref)
+    test_counts(tree, tree_ref, radii, True)
+    test_counts(tree, tree_ref, radii, False)
+    test_counts(tree, tree_ref, radii, True, other, other_ref)
+    test_counts(tree, tree_ref, radii, False, other, other_ref)
+    test_counts_weighted(tree, tree_ref, radii, weight_self)
+    test_counts_weighted(tree, tree_ref, radii, weight_self, other, other_ref, weight_other)
 
 
 if __name__ == "__main__":

@@ -758,7 +758,7 @@ static void search_counts_other(const Kdtree *self, const Kdtree *other, int idx
 void kdtree_counts(const Kdtree *self, const Kdtree *other, const double *radius, long *count,
                    int num, int cumulative)
 {
-    assert(self && radius && num >= 1 && count);
+    assert(self && radius && num > 0 && count);
 
     memset(count, 0, num * sizeof(*count));
     if (!other) {
@@ -767,6 +767,138 @@ void kdtree_counts(const Kdtree *self, const Kdtree *other, const double *radius
     else {
         assert(self->dim == other->dim);
         search_counts_other(self, other, 0, 0, radius, count, num);
+    }
+
+    if (cumulative) {
+        for (int i = 1; i < num; i++) {
+            count[i] += count[i - 1];
+        }
+    }
+}
+
+static void search_weighted(const Kdtree *self, int lhs, int rhs, const double *weight,
+                            const double *radius, double *count, int num)
+{
+    if (lhs > rhs) {
+        swap_int(&lhs, &rhs);
+    }
+
+    if (node_dist2(self, lhs, rhs) > radius[num - 1] * radius[num - 1]) {
+        return;
+    }
+
+    const Node *node_lhs = &self->node[lhs];
+
+    if (lhs == rhs) {
+        if (node_lhs->axis == -1) {
+            for (int i = node_lhs->child.leaf.beg; i < node_lhs->child.leaf.end; i++) {
+                for (int j = i + 1; j < node_lhs->child.leaf.end; j++) {
+                    double dist2 = 0;
+                    for (int k = 0; k < self->dim; k++) {
+                        double diff = get_value(self, i, k) - get_value(self, j, k);
+                        dist2 += diff * diff;
+                    }
+                    int bin = lower_bound(radius, num, dist2);
+                    if (bin < num) {
+                        count[bin] += weight[self->index[i]] * weight[self->index[j]];
+                    }
+                }
+            }
+            return;
+        }
+        int left = node_lhs->child.node.left;
+        int right = node_lhs->child.node.right;
+        search_weighted(self, left, left, weight, radius, count, num);
+        search_weighted(self, left, right, weight, radius, count, num);
+        search_weighted(self, right, right, weight, radius, count, num);
+        return;
+    }
+
+    const Node *node_rhs = &self->node[rhs];
+
+    if (node_lhs->axis == -1 && node_rhs->axis == -1) {
+        for (int i = node_lhs->child.leaf.beg; i < node_lhs->child.leaf.end; i++) {
+            for (int j = node_rhs->child.leaf.beg; j < node_rhs->child.leaf.end; j++) {
+                double dist2 = 0;
+                for (int k = 0; k < self->dim; k++) {
+                    double diff = get_value(self, i, k) - get_value(self, j, k);
+                    dist2 += diff * diff;
+                }
+                int bin = lower_bound(radius, num, dist2);
+                if (bin < num) {
+                    count[bin] += weight[self->index[i]] * weight[self->index[j]];
+                }
+            }
+        }
+        return;
+    }
+
+    if (node_lhs->axis == -1 || (node_rhs->axis != -1 && node_rhs->num >= node_lhs->num)) {
+        search_weighted(self, lhs, node_rhs->child.node.left, weight, radius, count, num);
+        search_weighted(self, lhs, node_rhs->child.node.right, weight, radius, count, num);
+    }
+    else {
+        search_weighted(self, node_lhs->child.node.left, rhs, weight, radius, count, num);
+        search_weighted(self, node_lhs->child.node.right, rhs, weight, radius, count, num);
+    }
+}
+
+static void search_weighted_other(const Kdtree *self, const Kdtree *other, int idx_self,
+                                  int idx_other, const double *weight_self,
+                                  const double *weight_other, const double *radius, double *count,
+                                  int num)
+{
+    if (other_dist2(self, other, idx_self, idx_other) > radius[num - 1] * radius[num - 1]) {
+        return;
+    }
+
+    const Node *node_self = &self->node[idx_self];
+    const Node *node_other = &other->node[idx_other];
+
+    if (node_self->axis == -1 && node_other->axis == -1) {
+        for (int i = node_self->child.leaf.beg; i < node_self->child.leaf.end; i++) {
+            for (int j = node_other->child.leaf.beg; j < node_other->child.leaf.end; j++) {
+                double dist2 = 0;
+                for (int k = 0; k < self->dim; k++) {
+                    double diff = get_value(self, i, k) - get_value(other, j, k);
+                    dist2 += diff * diff;
+                }
+                int bin = lower_bound(radius, num, dist2);
+                if (bin < num) {
+                    count[bin] += weight_self[self->index[i]] * weight_other[other->index[j]];
+                }
+            }
+        }
+        return;
+    }
+
+    if (node_self->axis == -1 || (node_other->axis != -1 && node_other->num >= node_self->num)) {
+        search_weighted_other(self, other, idx_self, node_other->child.node.left, weight_self,
+                              weight_other, radius, count, num);
+        search_weighted_other(self, other, idx_self, node_other->child.node.right, weight_self,
+                              weight_other, radius, count, num);
+    }
+    else {
+        search_weighted_other(self, other, node_self->child.node.left, idx_other, weight_self,
+                              weight_other, radius, count, num);
+        search_weighted_other(self, other, node_self->child.node.right, idx_other, weight_self,
+                              weight_other, radius, count, num);
+    }
+}
+
+void kdtree_weighted(const Kdtree *self, const Kdtree *other, const double *weight_self,
+                     const double *weight_other, const double *radius, double *count, int num,
+                     int cumulative)
+{
+    assert(self && radius && num > 0 && count && weight_self);
+
+    memset(count, 0, num * sizeof(*count));
+    if (!other) {
+        search_weighted(self, 0, 0, weight_self, radius, count, num);
+    }
+    else {
+        assert(self->dim == other->dim && weight_other);
+        search_weighted_other(self, other, 0, 0, weight_self, weight_other, radius, count, num);
     }
 
     if (cumulative) {

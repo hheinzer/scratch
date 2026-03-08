@@ -33,5 +33,12 @@ int kdtree_pairs(const Kdtree *self, const Kdtree *other, double radius, int (**
 void kdtree_counts(const Kdtree *self, const Kdtree *other, const double *radius, long *count,
                    int num, int cumulative);
 
+// Like `kdtree_counts`, but each pair (i, j) contributes `weight[i] * weight[j]` instead of 1. For
+// cross-pairs, `weight_self` applies to `self` and `weight_other` to `other`; for self-pairs,
+// `weight_other` is unused.
+void kdtree_weighted(const Kdtree *self, const Kdtree *other, const double *weight_self,
+                     const double *weight_other, const double *radius, double *count, int num,
+                     int cumulative);
+
 // Dump the tree structure to disk.
 void kdtree_dump(const Kdtree *self, const char *fname);

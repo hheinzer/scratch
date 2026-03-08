@@ -97,6 +97,19 @@ static void bench_counts(const Kdtree *tree, const Kdtree *other, const double *
     free(count);
 }
 
+static void bench_weighted(const Kdtree *tree, const Kdtree *other, const double *weight_self,
+                           const double *weight_other, const double *radii, int num)
+{
+    double *count = malloc(num * sizeof(*count));
+    assert(count);
+
+    double beg = get_time();
+    kdtree_weighted(tree, other, weight_self, weight_other, radii, count, num, 1);
+    report(other ? "cross-counts weighted" : "counts weighted", get_time() - beg);
+
+    free(count);
+}
+
 int main(int argc, char **argv)
 {
     srand(0);
@@ -131,6 +144,18 @@ int main(int argc, char **argv)
         }
     }
 
+    double *weight_self = malloc(num_points * sizeof(*weight_self));
+    assert(weight_self);
+    for (int i = 0; i < num_points; i++) {
+        weight_self[i] = random_uniform();
+    }
+
+    double *weight_other = malloc(num_queries * sizeof(*weight_other));
+    assert(weight_other);
+    for (int i = 0; i < num_queries; i++) {
+        weight_other[i] = random_uniform();
+    }
+
     Kdtree *other = kdtree_init(*query, num_queries, dim, leaf_size);
 
     Kdtree *tree = bench_init(*point, num_points, dim, leaf_size);
@@ -143,6 +168,8 @@ int main(int argc, char **argv)
     bench_counts(tree, 0, radii, num_radii, 0);
     bench_counts(tree, other, radii, num_radii, 1);
     bench_counts(tree, other, radii, num_radii, 0);
+    bench_weighted(tree, 0, weight_self, 0, radii, num_radii);
+    bench_weighted(tree, other, weight_self, weight_other, radii, num_radii);
 
     kdtree_deinit(tree);
     kdtree_deinit(other);
@@ -150,4 +177,6 @@ int main(int argc, char **argv)
     free(radii);
     free(point);
     free(query);
+    free(weight_self);
+    free(weight_other);
 }
