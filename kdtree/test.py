@@ -8,19 +8,23 @@ def check(label):
     print(f"{label:23s}", end=" ")
 
 
-def test_nearest(tree, tree_ref, queries, num):
+def test_nearest(tree, tree_ref, queries, num, queries_ref=None):
     check("nearest")
+    if queries_ref is None:
+        queries_ref = queries
     idx, dist = tree.nearest(queries, num, sorted=True)
-    dist_ref, idx_ref = tree_ref.query(queries, num)
+    dist_ref, idx_ref = tree_ref.query(queries_ref, num)
     assert np.array_equal(idx, idx_ref), "index mismatch"
     assert np.allclose(dist, dist_ref), "distance mismatch"
     print("passed")
 
 
-def test_radius(tree, tree_ref, queries, radius, sorted):
+def test_radius(tree, tree_ref, queries, radius, sorted, queries_ref=None):
     check("radius sorted" if sorted else "radius unsorted")
+    if queries_ref is None:
+        queries_ref = queries
     results = tree.radius(queries, radius, sorted=sorted)
-    results_ref = tree_ref.query_ball_point(queries, radius, return_sorted=sorted)
+    results_ref = tree_ref.query_ball_point(queries_ref, radius, return_sorted=sorted)
     for (idx_i, dist_i), idx_ref in zip(results, results_ref):
         assert set(idx_i.tolist()) == set(idx_ref), "index mismatch"
         if sorted:
@@ -79,27 +83,6 @@ def test_counts_weighted(
     print("passed")
 
 
-def test_counts_periodic():
-    check("counts periodic")
-    rng = np.random.default_rng(7)
-    num_points = 5000
-    dim = 3
-    periodic = 2.0
-    radii = np.linspace(0.1, 0.8, 8)
-
-    points = rng.uniform(-1, 1, (num_points, dim))
-
-    tree = KDTree(points, periodic=periodic)
-    # scipy requires points in [0, periodic), so wrap with modulo before passing
-    tree_ref = ScipyKDTree(points % periodic, boxsize=periodic)
-
-    counts = tree.counts(radii, cumulative=True)
-    counts_ref = tree_ref.count_neighbors(tree_ref, radii, cumulative=True)
-    counts_ref = (counts_ref - tree_ref.n) // 2
-    assert np.array_equal(counts, counts_ref), "periodic counts mismatch"
-    print("passed")
-
-
 def main():
     rng = np.random.default_rng(42)
 
@@ -114,29 +97,33 @@ def main():
     points = rng.uniform(-1, 1, (num_points, dim))
     queries = rng.uniform(-1, 1, (num_queries, dim))
 
-    tree = KDTree(points, leaf_size)
-    tree_ref = ScipyKDTree(points, leaf_size)
-
-    other = KDTree(queries, leaf_size)
-    other_ref = ScipyKDTree(queries, leaf_size)
-
     weight_self = rng.uniform(size=num_points)
     weight_other = rng.uniform(size=num_queries)
 
-    test_nearest(tree, tree_ref, queries, cap)
-    test_radius(tree, tree_ref, queries, radius, True)
-    test_radius(tree, tree_ref, queries, radius, False)
-    test_pairs(tree, tree_ref, radius, "set")
-    test_pairs(tree, tree_ref, radius, "ndarray")
-    test_pairs(tree, tree_ref, radius, "set", other, other_ref)
-    test_pairs(tree, tree_ref, radius, "ndarray", other, other_ref)
-    test_counts(tree, tree_ref, radii, True)
-    test_counts(tree, tree_ref, radii, False)
-    test_counts(tree, tree_ref, radii, True, other, other_ref)
-    test_counts(tree, tree_ref, radii, False, other, other_ref)
-    test_counts_weighted(tree, tree_ref, radii, weight_self)
-    test_counts_weighted(tree, tree_ref, radii, weight_self, other, other_ref, weight_other)
-    test_counts_periodic()
+    for periodic in [None, 2.0]:
+        # scipy requires points in [0, periodic), so wrap with modulo before passing
+        pts_ref = points % periodic if periodic else points
+        qrs_ref = queries % periodic if periodic else queries
+
+        tree = KDTree(points, leaf_size, periodic=periodic)
+        tree_ref = ScipyKDTree(pts_ref, leaf_size, boxsize=periodic)
+        other = KDTree(queries, leaf_size, periodic=periodic)
+        other_ref = ScipyKDTree(qrs_ref, leaf_size, boxsize=periodic)
+
+        print(f"--- {'periodic' if periodic else 'non-periodic'} ---")
+        test_nearest(tree, tree_ref, queries, cap, queries_ref=qrs_ref)
+        test_radius(tree, tree_ref, queries, radius, True, queries_ref=qrs_ref)
+        test_radius(tree, tree_ref, queries, radius, False, queries_ref=qrs_ref)
+        test_pairs(tree, tree_ref, radius, "set")
+        test_pairs(tree, tree_ref, radius, "ndarray")
+        test_pairs(tree, tree_ref, radius, "set", other, other_ref)
+        test_pairs(tree, tree_ref, radius, "ndarray", other, other_ref)
+        test_counts(tree, tree_ref, radii, True)
+        test_counts(tree, tree_ref, radii, False)
+        test_counts(tree, tree_ref, radii, True, other, other_ref)
+        test_counts(tree, tree_ref, radii, False, other, other_ref)
+        test_counts_weighted(tree, tree_ref, radii, weight_self)
+        test_counts_weighted(tree, tree_ref, radii, weight_self, other, other_ref, weight_other)
 
 
 if __name__ == "__main__":
