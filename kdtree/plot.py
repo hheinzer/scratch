@@ -8,9 +8,9 @@ from kdtree import KDTree
 rng = np.random.default_rng(0)
 
 POINT = "grey"
-EC = "darkorange"
+EC = "orange"
 FC = "none"
-LINE = "darkorange"
+LINE = "orange"
 QUERY = "purple"
 BAR = "purple"
 

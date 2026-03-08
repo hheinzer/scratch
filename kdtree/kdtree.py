@@ -20,8 +20,8 @@ _int2_p = ctypes.POINTER(_int2)
 _int2_pp = ctypes.POINTER(_int2_p)
 
 _int_np = ndpointer(dtype=np.intc, flags="C")
-_f64_np = ndpointer(dtype=np.float64, flags="C")
 _i64_np = ndpointer(dtype=np.int64, flags="C")
+_f64_np = ndpointer(dtype=np.float64, flags="C")
 
 _lib.kdtree_init.restype = _void_p
 _lib.kdtree_init.argtypes = [_f64_np, _int, _int, _int]
@@ -145,9 +145,9 @@ class KDTree:
             weight_self, weight_other = weights, None
         if weight_self is not None:
             weight_self = np.ascontiguousarray(weight_self, dtype=np.float64)
-            weight_ptr = weight_self.ctypes.data_as(_f64_p)
+            weight_self_ptr = weight_self.ctypes.data_as(_f64_p)
         else:
-            weight_ptr = None
+            weight_self_ptr = None
         if weight_other is not None:
             weight_other = np.ascontiguousarray(weight_other, dtype=np.float64)
             weight_other_ptr = weight_other.ctypes.data_as(_f64_p)
@@ -162,7 +162,7 @@ class KDTree:
         _lib.kdtree_weighted(
             self._ptr,
             other_ptr,
-            weight_ptr,
+            weight_self_ptr,
             weight_other_ptr,
             sorted,
             result,

@@ -246,7 +246,7 @@ static void sift_down(int *index, double *distance2, int pos, int num)
 {
     while (1) {
         int left = (2 * pos) + 1;
-        int right = (2 * pos) + 2;
+        int right = left + 1;
         int largest = pos;
         if (left < num && distance2[left] > distance2[largest]) {
             largest = left;
@@ -403,7 +403,7 @@ static void search_radius(const Kdtree *self, int idx, const double *point, doub
 int kdtree_radius(const Kdtree *self, const double *point, double radius, int **offset, int **index,
                   double **distance, int num, int sorted)
 {
-    assert(self && point && radius >= 0 && num > 0 && offset && index && distance);
+    assert(self && point && radius >= 0 && offset && index && distance && num > 0);
 
     *offset = malloc((num + 1) * sizeof(**offset));
     assert(*offset);
@@ -411,7 +411,6 @@ int kdtree_radius(const Kdtree *self, const double *point, double radius, int **
     int cap = num * self->leaf_size;
     *index = malloc(cap * sizeof(**index));
     assert(*index);
-
     *distance = malloc(cap * sizeof(**distance));
     assert(*distance);
 
@@ -469,19 +468,18 @@ static double node_dist2(const Kdtree *self, int lhs, int rhs)
 }
 
 typedef struct {
-    int num;
-    int cap;
+    int num, cap;
     int (*pair)[2];
 } Pairs;
 
 static void pair_push(Pairs *pairs, int lhs, int rhs)
 {
     if (pairs->num == pairs->cap) {
-        int new_cap = pairs->cap > 0 ? pairs->cap * 2 : 1;
-        int (*tmp)[2] = realloc(pairs->pair, new_cap * sizeof(*tmp));
-        assert(tmp);
-        pairs->pair = tmp;
-        pairs->cap = new_cap;
+        int cap = pairs->cap > 0 ? pairs->cap * 2 : 1;
+        int (*pair)[2] = realloc(pairs->pair, cap * sizeof(*pair));
+        assert(pair);
+        pairs->pair = pair;
+        pairs->cap = cap;
     }
     pairs->pair[pairs->num][0] = lhs;
     pairs->pair[pairs->num][1] = rhs;
@@ -758,7 +756,7 @@ static void search_counts_other(const Kdtree *self, const Kdtree *other, int idx
 void kdtree_counts(const Kdtree *self, const Kdtree *other, const double *radius, long *count,
                    int num, int cumulative)
 {
-    assert(self && radius && num > 0 && count);
+    assert(self && radius && count && num > 0);
 
     memset(count, 0, num * sizeof(*count));
     if (!other) {
@@ -890,7 +888,7 @@ void kdtree_weighted(const Kdtree *self, const Kdtree *other, const double *weig
                      const double *weight_other, const double *radius, double *count, int num,
                      int cumulative)
 {
-    assert(self && radius && num > 0 && count && weight_self);
+    assert(self && weight_self && radius && count && num > 0);
 
     memset(count, 0, num * sizeof(*count));
     if (!other) {

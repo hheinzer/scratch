@@ -61,7 +61,7 @@ static void bench_radius(const Kdtree *tree, const double *query, int num, doubl
 
 static void bench_pairs(const Kdtree *tree, const Kdtree *other, double radius)
 {
-    int (*pair)[2] = 0;
+    int (*pair)[2];
 
     double beg = get_time();
     kdtree_pairs(tree, other, radius, &pair);

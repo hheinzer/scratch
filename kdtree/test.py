@@ -48,7 +48,7 @@ def test_counts(tree, tree_ref, radii, cumulative, other=None, other_ref=None):
         check("counts cumulative" if cumulative else "counts per shell")
         counts = tree.counts(radii, cumulative=cumulative)
         counts_ref = tree_ref.count_neighbors(tree_ref, radii, cumulative=True)
-        counts_ref = (counts_ref - tree_ref.n) // 2
+        counts_ref = (counts_ref - tree_ref.n) // 2  # scipy counts ordered pairs including self
         if not cumulative:
             counts_ref = np.diff(counts_ref, prepend=0)
     else:
@@ -65,17 +65,17 @@ def test_counts_weighted(
     if other is None:
         check("counts weighted")
         result = tree.counts_weighted(radii, weight_self)
-        ref = tree_ref.count_neighbors(
+        result_ref = tree_ref.count_neighbors(
             tree_ref, radii, weights=(weight_self, weight_self), cumulative=True
         )
-        ref = (ref - np.sum(weight_self**2)) / 2
+        result_ref = (result_ref - np.sum(weight_self**2)) / 2
     else:
         check("cross-counts weighted")
         result = tree.counts_weighted(radii, (weight_self, weight_other), other=other)
-        ref = tree_ref.count_neighbors(
+        result_ref = tree_ref.count_neighbors(
             other_ref, radii, weights=(weight_self, weight_other), cumulative=True
         )
-    assert np.allclose(result, ref), "weighted counts mismatch"
+    assert np.allclose(result, result_ref), "weighted counts mismatch"
     print("passed")
 
 
@@ -83,12 +83,12 @@ def main():
     rng = np.random.default_rng(42)
 
     num_points = 10000
-    num_queries = 100
+    num_queries = 1000
     dim = 3
     leaf_size = 16
     cap = 8
     radius = 0.2
-    radii = np.linspace(0.05, 0.3, 6)
+    radii = np.linspace(0.05, 0.3, 10)
 
     points = rng.uniform(-1, 1, (num_points, dim))
     queries = rng.uniform(-1, 1, (num_queries, dim))

@@ -55,7 +55,7 @@ def bench_counts(tree, tree_ref, radii, cumulative, other=None, other_ref=None):
             lambda: tree_ref.count_neighbors(tree_ref, radii, cumulative=cumulative)
         )
     else:
-        label = "cross-counts cumulative" if cumulative else "cross-counts shell"
+        label = "cross-counts cumulative" if cumulative else "cross-counts per shell"
         wtime, _ = bench(lambda: tree.counts(radii, other=other, cumulative=cumulative))
         wtime_ref, _ = bench(
             lambda: tree_ref.count_neighbors(other_ref, radii, cumulative=cumulative)

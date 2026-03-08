@@ -25,9 +25,9 @@ must remain valid for the lifetime of the tree.
 caller-allocated arrays of size k. Results can optionally be sorted in ascending distance order.
 Returns the number of results found.
 
-**`kdtree_radius`** Find all points within a given radius of a query point. Writes up to a
-caller-specified number of results. Returns the total count, which may exceed the buffer size.
-Results can optionally be sorted in ascending distance order.
+**`kdtree_radius`** Find all points within a given radius of a set of query points. Allocates and
+writes results in CSR format; caller must free. Results can optionally be sorted in ascending
+distance order. Returns the total number of results.
 
 **`kdtree_pairs`** Find all pairs within a given radius using dual-tree traversal. If no second tree
 is given, finds unique self-pairs; otherwise finds cross-pairs between two trees of the same
@@ -38,11 +38,15 @@ pair count.
 radius, writes the number of pairs whose distance does not exceed it. Counts can be cumulative or
 per shell (between consecutive radii). Supports self-pairs and cross-pairs between two trees.
 
+**`kdtree_weighted`** Like `kdtree_counts`, but each pair (i, j) contributes `weight_self[i] *
+weight_self[j]` instead of 1. For cross-pairs, a separate `weight_other` applies to the second tree.
+Results are written as `double`.
+
 ## Performance
 
-Benchmarked against `scipy.spatial.KDTree` on 2M points in 3D with a leaf size of 16. Nearest
-neighbor search and radius search use 200K query points; pair and count operations run on the full
-2M-point tree with a radius of 0.02.
+Benchmarked against `scipy.spatial.KDTree` on 10M points in 3D with a leaf size of 16. Nearest
+neighbor search and radius search use 1M query points. Pair operations use a radius of 0.008;
+cumulative counts use 10 radii and per-shell counts use 100 radii up to 0.008.
 
 | Operation               | kdtree |   scipy | speedup |
 |:------------------------|-------:|--------:|--------:|
@@ -57,10 +61,9 @@ neighbor search and radius search use 200K query points; pair and count operatio
 | counts cumulative       | 5.949s | 22.479s |    3.8x |
 | counts per shell        | 5.951s | 17.438s |    2.9x |
 | cross-counts cumulative | 4.500s |  7.355s |    1.6x |
-| cross-counts shell      | 4.503s |  6.179s |    1.4x |
+| cross-counts per shell  | 4.503s |  6.179s |    1.4x |
 | counts weighted         | 6.400s | 22.187s |    3.5x |
 | cross-counts weighted   | 4.625s |  7.690s |    1.7x |
-
 
 Run `make bench` to reproduce. Pair and count operations benefit most from dual-tree pruning.
 
