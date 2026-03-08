@@ -67,18 +67,18 @@ neighbor search and radius search use 200K query points; pair and count operatio
 
 | Operation               | kdtree |   scipy | speedup |
 | :---------------------- | -----: | ------: | ------: |
-| init                    | 6.206s |  6.218s |    1.0x |
-| nearest                 | 8.131s |  8.501s |    1.0x |
-| radius sorted           | 7.284s |  9.221s |    1.3x |
-| radius unsorted         | 7.930s |  8.879s |    1.1x |
-| pairs set               | 6.165s |  9.673s |    1.6x |
-| pairs ndarray           | 3.442s |  5.570s |    1.6x |
-| cross-pairs set         | 3.978s |  6.244s |    1.6x |
-| cross-pairs ndarray     | 3.494s |  6.273s |    1.8x |
-| counts cumulative       | 6.165s | 22.921s |    3.7x |
-| counts per shell        | 6.158s | 17.866s |    2.9x |
-| cross-counts cumulative | 4.848s |  7.894s |    1.6x |
-| cross-counts shell      | 4.825s |  6.601s |    1.4x |
+| init                    | 5.649s |  5.675s |    1.0x |
+| nearest                 | 7.102s |  6.843s |    1.0x |
+| radius sorted           | 6.360s |  8.051s |    1.3x |
+| radius unsorted         | 6.576s |  7.711s |    1.2x |
+| pairs set               | 5.876s |  8.858s |    1.5x |
+| pairs ndarray           | 3.300s |  5.385s |    1.6x |
+| cross-pairs set         | 3.399s |  5.443s |    1.6x |
+| cross-pairs ndarray     | 2.941s |  5.449s |    1.9x |
+| counts cumulative       | 5.949s | 22.479s |    3.8x |
+| counts per shell        | 5.951s | 17.438s |    2.9x |
+| cross-counts cumulative | 4.500s |  7.355s |    1.6x |
+| cross-counts shell      | 4.503s |  6.179s |    1.4x |
 | counts weighted         | 6.400s | 22.187s |    3.5x |
 | cross-counts weighted   | 4.625s |  7.690s |    1.7x |
 

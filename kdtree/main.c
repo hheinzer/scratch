@@ -120,12 +120,19 @@ int main(int argc, char **argv)
     int leaf_size = (argc > 4) ? (int)strtol(argv[4], 0, 10) : 16;
     int cap = (argc > 5) ? (int)strtol(argv[5], 0, 10) : 16;
     double radius = (argc > 6) ? strtod(argv[6], 0) : 0.016;
-    int num_radii = (argc > 7) ? (int)strtol(argv[7], 0, 10) : 10;
+    int num_radii_few = (argc > 7) ? (int)strtol(argv[7], 0, 10) : 10;
+    int num_radii_many = (argc > 8) ? (int)strtol(argv[8], 0, 10) : 100;
 
-    double *radii = malloc(num_radii * sizeof(*radii));
-    assert(radii);
-    for (int i = 0; i < num_radii; i++) {
-        radii[i] = i * (radius / 2) / (num_radii - 1);
+    double *radii_few = malloc(num_radii_few * sizeof(*radii_few));
+    assert(radii_few);
+    for (int i = 0; i < num_radii_few; i++) {
+        radii_few[i] = i * (radius / 2) / (num_radii_few - 1);
+    }
+
+    double *radii_many = malloc(num_radii_many * sizeof(*radii_many));
+    assert(radii_many);
+    for (int i = 0; i < num_radii_many; i++) {
+        radii_many[i] = i * (radius / 2) / (num_radii_many - 1);
     }
 
     double (*point)[dim] = malloc(num_points * sizeof(*point));
@@ -162,19 +169,20 @@ int main(int argc, char **argv)
     bench_nearest(tree, *query, num_queries, cap);
     bench_radius(tree, *query, num_queries, radius, 1);
     bench_radius(tree, *query, num_queries, radius, 0);
-    bench_pairs(tree, 0, radii[num_radii - 1]);
-    bench_pairs(tree, other, radii[num_radii - 1]);
-    bench_counts(tree, 0, radii, num_radii, 1);
-    bench_counts(tree, 0, radii, num_radii, 0);
-    bench_counts(tree, other, radii, num_radii, 1);
-    bench_counts(tree, other, radii, num_radii, 0);
-    bench_weighted(tree, 0, weight_self, 0, radii, num_radii);
-    bench_weighted(tree, other, weight_self, weight_other, radii, num_radii);
+    bench_pairs(tree, 0, radii_few[num_radii_few - 1]);
+    bench_pairs(tree, other, radii_few[num_radii_few - 1]);
+    bench_counts(tree, 0, radii_few, num_radii_few, 1);
+    bench_counts(tree, 0, radii_many, num_radii_many, 0);
+    bench_counts(tree, other, radii_few, num_radii_few, 1);
+    bench_counts(tree, other, radii_many, num_radii_many, 0);
+    bench_weighted(tree, 0, weight_self, 0, radii_few, num_radii_few);
+    bench_weighted(tree, other, weight_self, weight_other, radii_few, num_radii_few);
 
     kdtree_deinit(tree);
     kdtree_deinit(other);
 
-    free(radii);
+    free(radii_few);
+    free(radii_many);
     free(point);
     free(query);
     free(weight_self);

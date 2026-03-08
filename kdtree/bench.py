@@ -92,7 +92,8 @@ def main():
     leaf_size = 16
     cap = 16
     radius = 0.016
-    radii = np.linspace(0, radius / 2, 10)
+    radii_few = np.linspace(0, radius / 2, 10)
+    radii_many = np.linspace(0, radius / 2, 100)
 
     points = rng.uniform(-1, 1, (num_points, dim))
     queries = rng.uniform(-1, 1, (num_queries, dim))
@@ -108,16 +109,16 @@ def main():
     bench_nearest(tree, tree_ref, queries, cap)
     bench_radius(tree, tree_ref, queries, radius, True)
     bench_radius(tree, tree_ref, queries, radius, False)
-    bench_pairs(tree, tree_ref, radii[-1], "set")
-    bench_pairs(tree, tree_ref, radii[-1], "ndarray")
-    bench_pairs(tree, tree_ref, radii[-1], "set", other, other_ref)
-    bench_pairs(tree, tree_ref, radii[-1], "ndarray", other, other_ref)
-    bench_counts(tree, tree_ref, radii, True)
-    bench_counts(tree, tree_ref, radii, False)
-    bench_counts(tree, tree_ref, radii, True, other, other_ref)
-    bench_counts(tree, tree_ref, radii, False, other, other_ref)
-    bench_weighted(tree, tree_ref, radii, weight_self)
-    bench_weighted(tree, tree_ref, radii, weight_self, other, other_ref, weight_other)
+    bench_pairs(tree, tree_ref, radii_few[-1], "set")
+    bench_pairs(tree, tree_ref, radii_few[-1], "ndarray")
+    bench_pairs(tree, tree_ref, radii_few[-1], "set", other, other_ref)
+    bench_pairs(tree, tree_ref, radii_few[-1], "ndarray", other, other_ref)
+    bench_counts(tree, tree_ref, radii_few, True)
+    bench_counts(tree, tree_ref, radii_many, False)
+    bench_counts(tree, tree_ref, radii_few, True, other, other_ref)
+    bench_counts(tree, tree_ref, radii_many, False, other, other_ref)
+    bench_weighted(tree, tree_ref, radii_few, weight_self)
+    bench_weighted(tree, tree_ref, radii_few, weight_self, other, other_ref, weight_other)
 
 
 if __name__ == "__main__":
