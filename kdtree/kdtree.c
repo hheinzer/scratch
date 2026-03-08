@@ -32,6 +32,7 @@ struct kdtree {
     int dim;
     int leaf_size;
     const double *point;
+    const double *periodic;
     int *index;
     Node *node;
     Rect *bbox;
@@ -153,7 +154,7 @@ static void build(Kdtree *self, int *next, int beg, int end)
     build(self, next, mid, end);
 }
 
-Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size)
+Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size, const double *periodic)
 {
     assert(point && num > 0 && dim > 0 && leaf_size >= 0);
 
@@ -164,6 +165,7 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size)
     self->dim = dim;
     self->leaf_size = leaf_size ? leaf_size : LEAF_SIZE;
     self->point = point;
+    self->periodic = periodic;
 
     self->index = malloc(num * sizeof(*self->index));
     assert(self->index);
@@ -181,6 +183,13 @@ Kdtree *kdtree_init(const double *point, int num, int dim, int leaf_size)
     int next = 0;
     build(self, &next, 0, num);
     assert(next == self->num_nodes);
+
+    if (periodic) {
+        const Rect *root = get_bbox(self, 0);
+        for (int i = 0; i < dim; i++) {
+            assert(root[i].max - root[i].min <= self->periodic[i]);
+        }
+    }
 
     return self;
 }
@@ -287,10 +296,18 @@ static double bbox_dist2(const Kdtree *self, const double *point, const Rect *bb
     for (int i = 0; i < self->dim; i++) {
         if (point[i] < bbox[i].min) {
             double diff = bbox[i].min - point[i];
+            if (self->periodic) {
+                double gap = self->periodic[i] - (bbox[i].max - point[i]);
+                diff = fmin(diff, fmax(0, gap));
+            }
             dist2 += diff * diff;
         }
         else if (point[i] > bbox[i].max) {
             double diff = point[i] - bbox[i].max;
+            if (self->periodic) {
+                double gap = self->periodic[i] - (point[i] - bbox[i].min);
+                diff = fmin(diff, fmax(0, gap));
+            }
             dist2 += diff * diff;
         }
     }
@@ -306,7 +323,10 @@ static void search(const Kdtree *self, int idx, const double *point, int *index,
         for (int i = node->child.leaf.beg; i < node->child.leaf.end; i++) {
             double dist2 = 0;
             for (int j = 0; j < self->dim; j++) {
-                double diff = point[j] - get_value(self, i, j);
+                double diff = fabs(point[j] - get_value(self, i, j));
+                if (self->periodic && diff > 0.5 * self->periodic[j]) {
+                    diff = self->periodic[j] - diff;
+                }
                 dist2 += diff * diff;
             }
             if (cap <= HEAP_THRESHOLD) {
@@ -382,7 +402,10 @@ static void search_radius(const Kdtree *self, int idx, const double *point, doub
         for (int i = node->child.leaf.beg; i < node->child.leaf.end; i++) {
             double dist2 = 0;
             for (int j = 0; j < self->dim; j++) {
-                double diff = point[j] - get_value(self, i, j);
+                double diff = fabs(point[j] - get_value(self, i, j));
+                if (self->periodic && diff > 0.5 * self->periodic[j]) {
+                    diff = self->periodic[j] - diff;
+                }
                 dist2 += diff * diff;
             }
             if (dist2 <= radius2) {
@@ -457,10 +480,18 @@ static double node_dist2(const Kdtree *self, int lhs, int rhs)
     for (int i = 0; i < self->dim; i++) {
         if (bbox_lhs[i].max < bbox_rhs[i].min) {
             double diff = bbox_rhs[i].min - bbox_lhs[i].max;
+            if (self->periodic) {
+                double gap = self->periodic[i] - (bbox_rhs[i].max - bbox_lhs[i].min);
+                diff = fmin(diff, fmax(0, gap));
+            }
             dist2 += diff * diff;
         }
         else if (bbox_rhs[i].max < bbox_lhs[i].min) {
             double diff = bbox_lhs[i].min - bbox_rhs[i].max;
+            if (self->periodic) {
+                double gap = self->periodic[i] - (bbox_lhs[i].max - bbox_rhs[i].min);
+                diff = fmin(diff, fmax(0, gap));
+            }
             dist2 += diff * diff;
         }
     }
@@ -504,7 +535,10 @@ static void search_pairs(const Kdtree *self, int lhs, int rhs, double radius2, P
                 for (int j = i + 1; j < node_lhs->child.leaf.end; j++) {
                     double dist2 = 0;
                     for (int k = 0; k < self->dim; k++) {
-                        double diff = get_value(self, i, k) - get_value(self, j, k);
+                        double diff = fabs(get_value(self, i, k) - get_value(self, j, k));
+                        if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                            diff = self->periodic[k] - diff;
+                        }
                         dist2 += diff * diff;
                     }
                     if (dist2 <= radius2) {
@@ -534,7 +568,10 @@ static void search_pairs(const Kdtree *self, int lhs, int rhs, double radius2, P
             for (int j = node_rhs->child.leaf.beg; j < node_rhs->child.leaf.end; j++) {
                 double dist2 = 0;
                 for (int k = 0; k < self->dim; k++) {
-                    double diff = get_value(self, i, k) - get_value(self, j, k);
+                    double diff = fabs(get_value(self, i, k) - get_value(self, j, k));
+                    if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                        diff = self->periodic[k] - diff;
+                    }
                     dist2 += diff * diff;
                 }
                 if (dist2 <= radius2) {
@@ -568,10 +605,18 @@ static double other_dist2(const Kdtree *self, const Kdtree *other, int idx_self,
     for (int i = 0; i < self->dim; i++) {
         if (bbox_self[i].max < bbox_other[i].min) {
             double diff = bbox_other[i].min - bbox_self[i].max;
+            if (self->periodic) {
+                double gap = self->periodic[i] - (bbox_other[i].max - bbox_self[i].min);
+                diff = fmin(diff, fmax(0, gap));
+            }
             dist2 += diff * diff;
         }
         else if (bbox_other[i].max < bbox_self[i].min) {
             double diff = bbox_self[i].min - bbox_other[i].max;
+            if (self->periodic) {
+                double gap = self->periodic[i] - (bbox_self[i].max - bbox_other[i].min);
+                diff = fmin(diff, fmax(0, gap));
+            }
             dist2 += diff * diff;
         }
     }
@@ -593,7 +638,10 @@ static void search_pairs_other(const Kdtree *self, const Kdtree *other, int idx_
             for (int j = node_other->child.leaf.beg; j < node_other->child.leaf.end; j++) {
                 double dist2 = 0;
                 for (int k = 0; k < self->dim; k++) {
-                    double diff = get_value(self, i, k) - get_value(other, j, k);
+                    double diff = fabs(get_value(self, i, k) - get_value(other, j, k));
+                    if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                        diff = self->periodic[k] - diff;
+                    }
                     dist2 += diff * diff;
                 }
                 if (dist2 <= radius2) {
@@ -666,7 +714,10 @@ static void search_counts(const Kdtree *self, int lhs, int rhs, const double *ra
                 for (int j = i + 1; j < node_lhs->child.leaf.end; j++) {
                     double dist2 = 0;
                     for (int k = 0; k < self->dim; k++) {
-                        double diff = get_value(self, i, k) - get_value(self, j, k);
+                        double diff = fabs(get_value(self, i, k) - get_value(self, j, k));
+                        if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                            diff = self->periodic[k] - diff;
+                        }
                         dist2 += diff * diff;
                     }
                     int bin = lower_bound(radius, num, dist2);
@@ -692,7 +743,10 @@ static void search_counts(const Kdtree *self, int lhs, int rhs, const double *ra
             for (int j = node_rhs->child.leaf.beg; j < node_rhs->child.leaf.end; j++) {
                 double dist2 = 0;
                 for (int k = 0; k < self->dim; k++) {
-                    double diff = get_value(self, i, k) - get_value(self, j, k);
+                    double diff = fabs(get_value(self, i, k) - get_value(self, j, k));
+                    if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                        diff = self->periodic[k] - diff;
+                    }
                     dist2 += diff * diff;
                 }
                 int bin = lower_bound(radius, num, dist2);
@@ -729,7 +783,10 @@ static void search_counts_other(const Kdtree *self, const Kdtree *other, int idx
             for (int j = node_other->child.leaf.beg; j < node_other->child.leaf.end; j++) {
                 double dist2 = 0;
                 for (int k = 0; k < self->dim; k++) {
-                    double diff = get_value(self, i, k) - get_value(other, j, k);
+                    double diff = fabs(get_value(self, i, k) - get_value(other, j, k));
+                    if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                        diff = self->periodic[k] - diff;
+                    }
                     dist2 += diff * diff;
                 }
                 int bin = lower_bound(radius, num, dist2);
@@ -793,7 +850,10 @@ static void search_weighted(const Kdtree *self, int lhs, int rhs, const double *
                 for (int j = i + 1; j < node_lhs->child.leaf.end; j++) {
                     double dist2 = 0;
                     for (int k = 0; k < self->dim; k++) {
-                        double diff = get_value(self, i, k) - get_value(self, j, k);
+                        double diff = fabs(get_value(self, i, k) - get_value(self, j, k));
+                        if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                            diff = self->periodic[k] - diff;
+                        }
                         dist2 += diff * diff;
                     }
                     int bin = lower_bound(radius, num, dist2);
@@ -819,7 +879,10 @@ static void search_weighted(const Kdtree *self, int lhs, int rhs, const double *
             for (int j = node_rhs->child.leaf.beg; j < node_rhs->child.leaf.end; j++) {
                 double dist2 = 0;
                 for (int k = 0; k < self->dim; k++) {
-                    double diff = get_value(self, i, k) - get_value(self, j, k);
+                    double diff = fabs(get_value(self, i, k) - get_value(self, j, k));
+                    if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                        diff = self->periodic[k] - diff;
+                    }
                     dist2 += diff * diff;
                 }
                 int bin = lower_bound(radius, num, dist2);
@@ -858,7 +921,10 @@ static void search_weighted_other(const Kdtree *self, const Kdtree *other, int i
             for (int j = node_other->child.leaf.beg; j < node_other->child.leaf.end; j++) {
                 double dist2 = 0;
                 for (int k = 0; k < self->dim; k++) {
-                    double diff = get_value(self, i, k) - get_value(other, j, k);
+                    double diff = fabs(get_value(self, i, k) - get_value(other, j, k));
+                    if (self->periodic && diff > 0.5 * self->periodic[k]) {
+                        diff = self->periodic[k] - diff;
+                    }
                     dist2 += diff * diff;
                 }
                 int bin = lower_bound(radius, num, dist2);

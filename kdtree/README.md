@@ -16,8 +16,10 @@ operations.
 
 **`kdtree_init`** Build a tree from a set of points stored in row-major order. The leaf size
 controls how many points are stored in leaf nodes (0 uses the default of 16). Only Euclidean
-distance is supported. The tree holds a pointer to the point data and does not copy it; the data
-must remain valid for the lifetime of the tree.
+distance is supported. Optionally accepts per-dimension box lengths to enable periodic boundary
+conditions (minimum image convention); points do not need to be pre-wrapped. The tree holds
+pointers to the input data and does not copy it; all inputs must remain valid for the lifetime of
+the tree.
 
 **`kdtree_deinit`** Free all memory associated with the tree.
 
@@ -29,18 +31,16 @@ Returns the number of results found.
 writes results in CSR format; caller must free. Results can optionally be sorted in ascending
 distance order. Returns the total number of results.
 
-**`kdtree_pairs`** Find all pairs within a given radius using dual-tree traversal. If no second tree
-is given, finds unique self-pairs; otherwise finds cross-pairs between two trees of the same
-dimension. Allocates and writes results to a caller-owned pointer; caller must free. Returns the
-pair count.
+**`kdtree_pairs`** Find all pairs within a given radius using dual-tree traversal. Finds unique
+self-pairs, or cross-pairs between two trees of the same dimension if a second tree is provided.
+Allocates and writes results to a caller-owned pointer; caller must free. Returns the pair count.
 
 **`kdtree_counts`** Count pairs within a series of radii (must be sorted ascending). For each
 radius, writes the number of pairs whose distance does not exceed it. Counts can be cumulative or
-per shell (between consecutive radii). Supports self-pairs and cross-pairs between two trees.
+per shell (between consecutive radii). Supports self-pairs and cross-pairs.
 
-**`kdtree_weighted`** Like `kdtree_counts`, but each pair (i, j) contributes `weight_self[i] *
-weight_self[j]` instead of 1. For cross-pairs, a separate `weight_other` applies to the second tree.
-Results are written as `double`.
+**`kdtree_weighted`** Like `kdtree_counts`, but each pair contributes the product of its two weights
+instead of 1. For cross-pairs, separate weight arrays are supplied for each tree.
 
 ## Performance
 
@@ -48,22 +48,22 @@ Benchmarked against `scipy.spatial.KDTree` on 10M points in 3D with a leaf size 
 neighbor search and radius search use 1M query points. Pair operations use a radius of 0.008;
 cumulative counts use 10 radii and per-shell counts use 100 radii up to 0.008.
 
-| Operation               | kdtree |   scipy | speedup |
-|:------------------------|-------:|--------:|--------:|
-| init                    | 5.649s |  5.675s |    1.0x |
-| nearest                 | 7.102s |  6.843s |    1.0x |
-| radius sorted           | 6.360s |  8.051s |    1.3x |
-| radius unsorted         | 6.576s |  7.711s |    1.2x |
-| pairs set               | 5.876s |  8.858s |    1.5x |
-| pairs ndarray           | 3.300s |  5.385s |    1.6x |
-| cross-pairs set         | 3.399s |  5.443s |    1.6x |
-| cross-pairs ndarray     | 2.941s |  5.449s |    1.9x |
-| counts cumulative       | 5.949s | 22.479s |    3.8x |
-| counts per shell        | 5.951s | 17.438s |    2.9x |
-| cross-counts cumulative | 4.500s |  7.355s |    1.6x |
-| cross-counts per shell  | 4.503s |  6.179s |    1.4x |
-| counts weighted         | 6.400s | 22.187s |    3.5x |
-| cross-counts weighted   | 4.625s |  7.690s |    1.7x |
+| Operation               |  kdtree |   scipy | speedup |
+|:------------------------|--------:|--------:|--------:|
+| init                    |  9.915s |  9.663s |    1.0x |
+| nearest                 | 10.382s | 10.985s |    1.1x |
+| radius sorted           | 10.935s | 13.377s |    1.2x |
+| radius unsorted         | 12.060s | 12.631s |    1.0x |
+| pairs set               | 11.925s | 15.915s |    1.3x |
+| pairs ndarray           |  7.472s | 10.638s |    1.4x |
+| cross-pairs set         |  6.508s |  9.173s |    1.4x |
+| cross-pairs ndarray     |  5.826s |  9.230s |    1.6x |
+| counts cumulative       | 12.528s | 44.641s |    3.6x |
+| counts per shell        | 17.435s | 44.921s |    2.6x |
+| cross-counts cumulative |  8.414s | 13.791s |    1.6x |
+| cross-counts per shell  | 11.834s | 14.823s |    1.3x |
+| counts weighted         | 13.078s | 43.649s |    3.3x |
+| cross-counts weighted   |  8.546s | 13.862s |    1.6x |
 
 Run `make bench` to reproduce. Pair and count operations benefit most from dual-tree pruning.
 

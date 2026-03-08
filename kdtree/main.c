@@ -23,7 +23,7 @@ static double random_uniform(void)
 static Kdtree *bench_init(const double *point, int num, int dim, int leaf_size)
 {
     double beg = get_time();
-    Kdtree *tree = kdtree_init(point, num, dim, leaf_size);
+    Kdtree *tree = kdtree_init(point, num, dim, leaf_size, 0);
     report("init", get_time() - beg);
     return tree;
 }
@@ -163,7 +163,7 @@ int main(int argc, char **argv)
         weight_other[i] = random_uniform();
     }
 
-    Kdtree *other = kdtree_init(*query, num_queries, dim, leaf_size);
+    Kdtree *other = kdtree_init(*query, num_queries, dim, leaf_size, 0);
 
     Kdtree *tree = bench_init(*point, num_points, dim, leaf_size);
     bench_nearest(tree, *query, num_queries, cap);

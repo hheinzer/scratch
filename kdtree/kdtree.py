@@ -24,7 +24,7 @@ _i64_np = ndpointer(dtype=np.int64, flags="C")
 _f64_np = ndpointer(dtype=np.float64, flags="C")
 
 _lib.kdtree_init.restype = _void_p
-_lib.kdtree_init.argtypes = [_f64_np, _int, _int, _int]
+_lib.kdtree_init.argtypes = [_f64_np, _int, _int, _int, _f64_p]
 
 _lib.kdtree_deinit.restype = None
 _lib.kdtree_deinit.argtypes = [_void_p]
@@ -53,12 +53,19 @@ _libc.free.restype = None
 
 
 class KDTree:
-    def __init__(self, points, leaf_size=0):
+    def __init__(self, points, leaf_size=0, periodic=None):
         points = np.ascontiguousarray(points, dtype=np.float64)
         if points.ndim != 2:
             raise ValueError("points must be a 2D array of shape (num, dim)")
         num, dim = points.shape
-        self._ptr = _lib.kdtree_init(points, num, dim, leaf_size)
+        if periodic is not None:
+            periodic = np.ascontiguousarray(
+                np.broadcast_to(np.asarray(periodic, dtype=np.float64), (dim,))
+            )
+            periodic_ptr = periodic.ctypes.data_as(_f64_p)
+        else:
+            periodic_ptr = None
+        self._ptr = _lib.kdtree_init(points, num, dim, leaf_size, periodic_ptr)
 
     def __del__(self):
         if hasattr(self, "_ptr") and self._ptr:

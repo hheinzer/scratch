@@ -79,6 +79,27 @@ def test_counts_weighted(
     print("passed")
 
 
+def test_counts_periodic():
+    check("counts periodic")
+    rng = np.random.default_rng(7)
+    num_points = 5000
+    dim = 3
+    periodic = 2.0
+    radii = np.linspace(0.1, 0.8, 8)
+
+    points = rng.uniform(-1, 1, (num_points, dim))
+
+    tree = KDTree(points, periodic=periodic)
+    # scipy requires points in [0, periodic), so wrap with modulo before passing
+    tree_ref = ScipyKDTree(points % periodic, boxsize=periodic)
+
+    counts = tree.counts(radii, cumulative=True)
+    counts_ref = tree_ref.count_neighbors(tree_ref, radii, cumulative=True)
+    counts_ref = (counts_ref - tree_ref.n) // 2
+    assert np.array_equal(counts, counts_ref), "periodic counts mismatch"
+    print("passed")
+
+
 def main():
     rng = np.random.default_rng(42)
 
@@ -115,6 +136,7 @@ def main():
     test_counts(tree, tree_ref, radii, False, other, other_ref)
     test_counts_weighted(tree, tree_ref, radii, weight_self)
     test_counts_weighted(tree, tree_ref, radii, weight_self, other, other_ref, weight_other)
+    test_counts_periodic()
 
 
 if __name__ == "__main__":
