@@ -674,7 +674,9 @@ int kdtree_pairs(const Kdtree *self, const Kdtree *other, double radius, int (**
         search_pairs(self, 0, 0, radius * radius, &pairs);
     }
     else {
-        assert(self->dim == other->dim);
+        assert(self->dim == other->dim && !self->periodic == !other->periodic &&
+               (!self->periodic ||
+                !memcmp(self->periodic, other->periodic, self->dim * sizeof(*self->periodic))));
         search_pairs_other(self, other, 0, 0, radius * radius, &pairs);
     }
 
@@ -823,7 +825,9 @@ void kdtree_counts(const Kdtree *self, const Kdtree *other, const double *radius
         search_counts(self, 0, 0, radius, count, num);
     }
     else {
-        assert(self->dim == other->dim);
+        assert(self->dim == other->dim && !self->periodic == !other->periodic &&
+               (!self->periodic ||
+                !memcmp(self->periodic, other->periodic, self->dim * sizeof(*self->periodic))));
         search_counts_other(self, other, 0, 0, radius, count, num);
     }
 
@@ -964,7 +968,10 @@ void kdtree_weighted(const Kdtree *self, const Kdtree *other, const double *weig
         search_weighted(self, 0, 0, weight_self, radius, count, num);
     }
     else {
-        assert(self->dim == other->dim && weight_other);
+        assert(self->dim == other->dim && !self->periodic == !other->periodic &&
+               (!self->periodic ||
+                !memcmp(self->periodic, other->periodic, self->dim * sizeof(*self->periodic))) &&
+               weight_other);
         search_weighted_other(self, other, 0, 0, weight_self, weight_other, radius, count, num);
     }
 
