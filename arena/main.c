@@ -186,6 +186,49 @@ static void test_resize_grow(void)
     arena_deinit(arena);
 }
 
+static void test_resize_null(void)
+{
+    Arena *arena = arena_init(1 << 16, 0);
+
+    // null pointer behaves like arena_malloc
+    int *arr = arena_resize(arena, 0, 4, sizeof(*arr), 0);
+    assert(arr);
+    for (int i = 0; i < 4; i++) {
+        arr[i] = i;
+    }
+    for (int i = 0; i < 4; i++) {
+        assert(arr[i] == i);
+    }
+
+    arena_deinit(arena);
+}
+
+static void test_resize_save_load(void)
+{
+    // cross-chunk resize followed by save/load frees the grown chunk
+    Arena *arena = arena_init(1 << 10, 1);
+
+    int *arr = arena_malloc(arena, 4, sizeof(*arr), 0);
+    assert(arr);
+    for (int i = 0; i < 4; i++) {
+        arr[i] = i;
+    }
+
+    Mark *mark = arena_save(arena);
+
+    // force cross-chunk resize after the mark
+    arr = arena_resize(arena, 0, 1000, sizeof(*arr), 0);
+    assert(arr);
+
+    arena_load(arena, mark);
+
+    // grown chunk freed; can allocate again from the original chunk
+    int *fresh = arena_malloc(arena, 4, sizeof(*fresh), 0);
+    assert(fresh);
+
+    arena_deinit(arena);
+}
+
 int main(void)
 {
     test_basic();
@@ -196,4 +239,6 @@ int main(void)
     test_alignment();
     test_resize();
     test_resize_grow();
+    test_resize_null();
+    test_resize_save_load();
 }
