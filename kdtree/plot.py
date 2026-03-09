@@ -2,6 +2,7 @@ import tempfile
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
+from scipy.spatial import KDTree as ScipyKDTree
 
 from kdtree import KDTree
 
@@ -165,6 +166,37 @@ def plot_counts(tree, max_radius=1):
     plt.show(block=False)
 
 
+def plot_radial_distribution_function(points, L, num_bins=100):
+    points %= L
+    num = len(points)
+    tree = KDTree(points, periodic=L)
+    tree_ref = ScipyKDTree(points, boxsize=L)
+
+    edges = np.linspace(0, L / 2, num_bins + 1)
+    shell = tree.counts(edges[1:], cumulative=False)
+
+    shell_ref = tree_ref.count_neighbors(tree_ref, edges[1:], cumulative=False)
+    shell_ref[0] -= num  # scipy counts ordered pairs including self
+    shell_ref //= 2
+
+    radius = 0.5 * (edges[:-1] + edges[1:])
+    dV = np.pi * (edges[1:] ** 2 - edges[:-1] ** 2)
+    norm = num**2 * dV / (2 * L**2)
+    grdf = shell / norm
+    grdf_ref = shell_ref / norm
+
+    _, ax = plt.subplots()
+    ax.axhline(1, c="gray", ls=":")
+    ax.plot(radius, grdf, c=LINE, label="kdtree")
+    ax.plot(radius, grdf_ref, c="purple", ls="--", label="scipy")
+    ax.legend()
+    ax.set_xlabel("r")
+    ax.set_ylabel("g(r)")
+    ax.set_title("radial distribution function")
+    ax.set_box_aspect(1)
+    plt.show(block=False)
+
+
 def main():
     # points = create_uniform()
     # points = create_meshgrid()
@@ -178,6 +210,7 @@ def main():
     plot_radius(points, tree)
     plot_pairs(points, tree)
     plot_counts(tree)
+    plot_radial_distribution_function(points, L=2)
 
     plt.show()
 
