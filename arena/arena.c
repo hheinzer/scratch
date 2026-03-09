@@ -76,6 +76,45 @@ void arena_deinit(Arena *self)
     }
 }
 
+Mark *arena_save(Arena *self)
+{
+    assert(self);
+
+    char *base = self->base;
+    char *last = self->last;
+    char *beg = self->beg;
+
+    Mark *mark = arena_malloc(self, 1, sizeof(*mark), sizeof(void *));
+    mark->base = base;
+    mark->last = last;
+    mark->beg = beg;
+
+    self->last = 0;
+
+    return mark;
+}
+
+void arena_load(Arena *self, const Mark *mark)
+{
+    assert(self && mark);
+
+    while (self->prev && self->base != mark->base) {
+        Arena *prev = self->prev;
+        free(self->base);
+        *self = *prev;
+        free(prev);
+    }
+
+    assert(self->base == mark->base && self->base <= mark->beg && mark->beg <= self->beg);
+    char *last = mark->last;
+    char *beg = mark->beg;
+
+    MAKE_REGION_NOACCESS(mark->beg, self->beg - mark->beg);
+
+    self->last = last;
+    self->beg = beg;
+}
+
 static void grow(Arena *self, int num, int size, int align)
 {
     assert(num <= (PTRDIFF_MAX - REDZONE - (align - 1)) / size);
@@ -187,43 +226,4 @@ void *arena_resize(Arena *self, void *last, int num, int size, int align)
     MAKE_REGION_NOACCESS(old_last, old_bytes);
 
     return self->last;
-}
-
-Mark *arena_save(Arena *self)
-{
-    assert(self);
-
-    char *base = self->base;
-    char *last = self->last;
-    char *beg = self->beg;
-
-    Mark *mark = arena_malloc(self, 1, sizeof(*mark), sizeof(void *));
-    mark->base = base;
-    mark->last = last;
-    mark->beg = beg;
-
-    self->last = 0;
-
-    return mark;
-}
-
-void arena_load(Arena *self, const Mark *mark)
-{
-    assert(self && mark);
-
-    while (self->prev && self->base != mark->base) {
-        Arena *prev = self->prev;
-        free(self->base);
-        *self = *prev;
-        free(prev);
-    }
-
-    assert(self->base == mark->base && self->base <= mark->beg && mark->beg <= self->beg);
-    char *last = mark->last;
-    char *beg = mark->beg;
-
-    MAKE_REGION_NOACCESS(mark->beg, self->beg - mark->beg);
-
-    self->last = last;
-    self->beg = beg;
 }

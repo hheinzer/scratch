@@ -12,6 +12,14 @@ Arena *arena_init(ptrdiff_t capacity, int growable);
 // Free all memory owned by the arena, including any grown chunks.
 void arena_deinit(Arena *self);
 
+// Save the current arena position and return an opaque mark. The mark is allocated inside the
+// arena. Any marks saved after this one are invalidated by a call to `arena_load`.
+Mark *arena_save(Arena *self);
+
+// Restore the arena to the position recorded in `mark`, freeing all allocations made after the
+// save. Chunks allocated after the save are freed.
+void arena_load(Arena *self, const Mark *mark);
+
 // Allocate `num` elements of `size` bytes each. Returns 0 if `num` is 0. `align` must be a power of
 // two, or 0 for default alignment. Calls `abort` on out-of-memory if the arena is not growable.
 void *arena_malloc(Arena *self, int num, int size, int align) __attribute__((malloc));
@@ -24,11 +32,3 @@ void *arena_calloc(Arena *self, int num, int size, int align) __attribute__((mal
 // 0, behaves like `arena_malloc`. Returns 0 if `num` is 0. Calls `abort` on out-of-memory if the
 // arena is not growable.
 void *arena_resize(Arena *self, void *last, int num, int size, int align);
-
-// Save the current arena position and return an opaque mark. The mark is allocated inside the
-// arena. Any marks saved after this one are invalidated by a call to `arena_load`.
-Mark *arena_save(Arena *self);
-
-// Restore the arena to the position recorded in `mark`, freeing all allocations made after the
-// save. Chunks allocated after the save are freed.
-void arena_load(Arena *self, const Mark *mark);
