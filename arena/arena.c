@@ -136,6 +136,59 @@ void *arena_calloc(Arena *self, int num, int size, int align)
     return ptr ? memset(ptr, 0, (ptrdiff_t)num * size) : 0;
 }
 
+void *arena_resize(Arena *self, void *last, int num, int size, int align)
+{
+    assert(self && num >= 0 && size > 0 && align >= 0);
+
+    if (!last) {
+        return arena_malloc(self, num, size, align);
+    }
+
+    assert(self->last == last);
+    char *old_last = self->last;
+    ptrdiff_t old_bytes = self->beg - old_last;
+
+    if (num == 0) {
+        MAKE_REGION_NOACCESS(old_last, old_bytes);
+        self->last = 0;
+        self->beg = old_last;
+        return 0;
+    }
+
+    if (align == 0 || (align & (align - 1)) != 0) {
+        align = ALIGN;
+    }
+
+    ptrdiff_t new_bytes = (ptrdiff_t)num * size;
+    if (num <= (self->end - old_last - REDZONE) / size) {
+        self->beg = old_last + new_bytes;
+        if (old_bytes < new_bytes) {
+            MAKE_REGION_ADDRESSABLE(old_last + old_bytes, new_bytes - old_bytes);
+        }
+        else {
+            MAKE_REGION_NOACCESS(old_last + new_bytes, old_bytes - new_bytes);
+        }
+        return old_last;
+    }
+
+    if (!self->growable) {
+        abort();
+    }
+
+    self->beg = old_last;  // reclaim
+    grow(self, num, size, align);
+
+    ptrdiff_t padding = -(intptr_t)(self->beg + REDZONE) & (align - 1);
+    self->last = self->beg + REDZONE + padding;
+    self->beg = self->last + new_bytes;
+
+    MAKE_REGION_ADDRESSABLE(self->last, new_bytes);
+    memmove(self->last, old_last, old_bytes < new_bytes ? old_bytes : new_bytes);
+    MAKE_REGION_NOACCESS(old_last, old_bytes);
+
+    return self->last;
+}
+
 Mark *arena_save(Arena *self)
 {
     assert(self);

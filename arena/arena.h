@@ -19,6 +19,12 @@ void *arena_malloc(Arena *self, int num, int size, int align) __attribute__((mal
 // Same as `arena_malloc`, but zero-initializes the returned memory.
 void *arena_calloc(Arena *self, int num, int size, int align) __attribute__((malloc));
 
+// Resize the last allocation to `num` elements of `size` bytes each. Grows or shrinks in place if
+// there is room; otherwise allocates a new block in a grown chunk and copies the data. If `last` is
+// 0, behaves like `arena_malloc`. Returns 0 if `num` is 0. Calls `abort` on out-of-memory if the
+// arena is not growable.
+void *arena_resize(Arena *self, void *last, int num, int size, int align);
+
 // Save the current arena position and return an opaque mark. The mark is allocated inside the
 // arena. Any marks saved after this one are invalidated by a call to `arena_load`.
 Mark *arena_save(Arena *self);

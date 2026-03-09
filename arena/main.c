@@ -139,6 +139,53 @@ static void test_alignment(void)
     arena_deinit(arena);
 }
 
+static void test_resize(void)
+{
+    Arena *arena = arena_init(1 << 16, 0);
+
+    int *arr = arena_malloc(arena, 4, sizeof(*arr), 0);
+    assert(arr);
+    for (int i = 0; i < 4; i++) {
+        arr[i] = i;
+    }
+
+    // grow in place
+    arr = arena_resize(arena, arr, 8, sizeof(*arr), 0);
+    assert(arr);
+    for (int i = 0; i < 4; i++) {
+        assert(arr[i] == i);
+    }
+
+    // shrink in place
+    arr = arena_resize(arena, arr, 2, sizeof(*arr), 0);
+    assert(arr[0] == 0 && arr[1] == 1);
+
+    // resize to zero
+    assert(arena_resize(arena, arr, 0, sizeof(*arr), 0) == 0);
+
+    arena_deinit(arena);
+}
+
+static void test_resize_grow(void)
+{
+    // force cross-chunk resize
+    Arena *arena = arena_init(64, 1);
+
+    int *arr = arena_malloc(arena, 4, sizeof(*arr), 0);
+    assert(arr);
+    for (int i = 0; i < 4; i++) {
+        arr[i] = i;
+    }
+
+    arr = arena_resize(arena, arr, 1000, sizeof(*arr), 0);
+    assert(arr);
+    for (int i = 0; i < 4; i++) {
+        assert(arr[i] == i);
+    }
+
+    arena_deinit(arena);
+}
+
 int main(void)
 {
     test_basic();
@@ -147,4 +194,6 @@ int main(void)
     test_save_load_across_grow();
     test_grow();
     test_alignment();
+    test_resize();
+    test_resize_grow();
 }
