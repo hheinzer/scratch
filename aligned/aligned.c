@@ -1,5 +1,10 @@
 #include "aligned.h"
 
+#include <assert.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
 #ifndef __has_feature
 #define __has_feature(x) 0
 #endif
@@ -18,32 +23,27 @@
 
 #endif
 
-#include <assert.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
-enum { ALIGNMENT = 64 };
+enum { ALIGN = 64 };
 
 typedef struct {
     void *base;
     size_t bytes;
-    int alignment;
+    int align;
 } Header;
 
-void *aligned_malloc(int num, int size, int alignment)
+void *aligned_malloc(int num, int size, int align)
 {
-    assert(num >= 0 && size > 0 && (alignment & (alignment - 1)) == 0);
+    assert(num >= 0 && size > 0 && (align & (align - 1)) == 0);
 
     if (num == 0) {
         return 0;
     }
 
-    if (alignment == 0) {
-        alignment = ALIGNMENT;
+    if (align == 0) {
+        align = ALIGN;
     }
 
-    size_t extra = sizeof(Header) + (alignment - 1);
+    size_t extra = sizeof(Header) + (align - 1);
 
     assert((size_t)num <= (SIZE_MAX - extra) / size);
     size_t bytes = (size_t)num * size;
@@ -52,27 +52,30 @@ void *aligned_malloc(int num, int size, int alignment)
     assert(base);
 
     char *beg = base + sizeof(Header);
-    char *ptr = beg + (-(uintptr_t)beg & (alignment - 1));
+    char *ptr = beg + (-(uintptr_t)beg & (align - 1));
 
     ((Header *)ptr)[-1].base = base;
     ((Header *)ptr)[-1].bytes = bytes;
-    ((Header *)ptr)[-1].alignment = alignment;
+    ((Header *)ptr)[-1].align = align;
 
     MAKE_REGION_NOACCESS(base, (size_t)(ptr - base));
 
     return ptr;
 }
 
-void *aligned_calloc(int num, int size, int alignment)
+void *aligned_calloc(int num, int size, int align)
 {
-    assert(num >= 0 && size > 0 && (alignment & (alignment - 1)) == 0);
-    void *ptr = aligned_malloc(num, size, alignment);
-    return ptr ? memset(ptr, 0, (size_t)num * size) : 0;
+    assert(num >= 0 && size > 0 && (align & (align - 1)) == 0);
+    if (num == 0) {
+        return 0;
+    }
+    void *ptr = aligned_malloc(num, size, align);
+    return memset(ptr, 0, (size_t)num * size);
 }
 
-void *aligned_realloc(void *ptr, int num, int size, int alignment)
+void *aligned_realloc(void *ptr, int num, int size, int align)
 {
-    assert(num >= 0 && size > 0 && (alignment & (alignment - 1)) == 0);
+    assert(num >= 0 && size > 0 && (align & (align - 1)) == 0);
 
     if (num == 0) {
         aligned_free(ptr);
@@ -80,19 +83,19 @@ void *aligned_realloc(void *ptr, int num, int size, int alignment)
     }
 
     if (!ptr) {
-        return aligned_malloc(num, size, alignment);
+        return aligned_malloc(num, size, align);
     }
 
     MAKE_REGION_ADDRESSABLE((char *)ptr - sizeof(Header), sizeof(Header));
 
     size_t old_bytes = ((Header *)ptr)[-1].bytes;
-    int old_alignment = ((Header *)ptr)[-1].alignment;
+    int old_align = ((Header *)ptr)[-1].align;
 
-    if (alignment == 0) {
-        alignment = old_alignment;
+    if (align == 0) {
+        align = old_align;
     }
 
-    void *new_ptr = aligned_malloc(num, size, alignment);
+    void *new_ptr = aligned_malloc(num, size, align);
 
     size_t new_bytes = (size_t)num * size;
     memcpy(new_ptr, ptr, old_bytes < new_bytes ? old_bytes : new_bytes);
