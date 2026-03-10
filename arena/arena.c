@@ -109,7 +109,7 @@ void arena_load(Arena *self, const Mark *mark)
     char *last = mark->last;
     char *beg = mark->beg;
 
-    MAKE_REGION_NOACCESS(mark->beg, self->beg - mark->beg);
+    MAKE_REGION_NOACCESS(beg, self->beg - beg);
 
     self->last = last;
     self->beg = beg;
@@ -199,7 +199,7 @@ void *arena_resize(Arena *self, void *last, int num, int size, int align)
     }
 
     ptrdiff_t new_bytes = (ptrdiff_t)num * size;
-    if (num <= (self->end - old_last - REDZONE) / size) {
+    if (num <= (self->end - old_last) / size) {
         self->beg = old_last + new_bytes;
         if (old_bytes < new_bytes) {
             MAKE_REGION_ADDRESSABLE(old_last + old_bytes, new_bytes - old_bytes);

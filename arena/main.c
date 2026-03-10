@@ -163,6 +163,12 @@ static void test_resize(void)
     // resize to zero
     assert(arena_resize(arena, arr, 0, sizeof(*arr), 0) == 0);
 
+    // last=0 behaves like arena_malloc
+    int *fresh = arena_resize(arena, 0, 4, sizeof(*fresh), 0);
+    assert(fresh);
+    fresh[0] = 99;
+    assert(fresh[0] == 99);
+
     arena_deinit(arena);
 }
 
