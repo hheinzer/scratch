@@ -10,19 +10,15 @@ compilation flags.
 
 ## Functions
 
-**`defer_init`** Initialize an empty defer stack. Returns null; the stack grows on push.
+**`defer_init`** Initialize an empty defer stack.
 
-**`defer_deinit`** Run all deferred calls in LIFO order, then free the stack. Each call invokes
-`func(*ptr)` using the pointer value at the time of deinit, not at push time. Safe to call with a
-null stack.
+**`defer_deinit`** Run all deferred calls in LIFO order, then free the stack.
 
-**`defer_push`** Push a deferred call onto the stack. `ptr` must be passed as `&ptr` (address of the
-pointer).
+**`defer_push`** Push a deferred call onto the stack.
 
-**`defer_pop`** Cancel the last deferred call without running it.
+**`defer_pop`** Cancel the deferred call associated with a given pointer without running it. Scans
+the stack for the first matching entry and cancels it. No-op if the pointer is not found.
 
 ## Implementation notes
 
-- Each stack node is a heap-allocated linked list entry storing a pointer-to-pointer and a function
-- Storing `&ptr` rather than `ptr` means the deferred call sees the current value of the pointer at
-  deinit time; setting a pointer to 0 after manually freeing it prevents a double-free
+- Each stack node is a heap-allocated linked list entry storing a pointer and a function
