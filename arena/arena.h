@@ -32,3 +32,6 @@ void *arena_calloc(Arena *self, int num, int size, int align) __attribute__((mal
 // 0, behaves like `arena_malloc`. Returns 0 if `num` is 0. Calls `abort` on out-of-memory if the
 // arena is not growable.
 void *arena_resize(Arena *self, void *last, int num, int size, int align);
+
+// Dump the arena structure to disk.
+void arena_dump(const Arena *self, const char *fname);

@@ -9,7 +9,7 @@ CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 all: main
 
 clean:
-	@rm -f main
+	@rm -f main *.out
 
 test: main
 	@./main

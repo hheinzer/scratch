@@ -1,7 +1,9 @@
 #include "arena.h"
 
 #include <assert.h>
+#include <ctype.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -226,4 +228,43 @@ void *arena_resize(Arena *self, void *last, int num, int size, int align)
     MAKE_REGION_NOACCESS(old_last, old_bytes);
 
     return self->last;
+}
+
+__attribute__((no_sanitize("address"))) static void dump(const Arena *self, FILE *file, int offset)
+{
+    if (self->prev) {
+        dump(self->prev, file, offset);
+    }
+    fprintf(file, "%-8s  %-*s %s\n", "offset", 3 * offset, "data", "ascii");
+    for (const char *byte = self->base; byte < self->end; byte += offset) {
+        fprintf(file, "%08tx  ", byte - (char *)self->base);
+        for (int i = 0; i < offset; i++) {
+            if (byte + i < self->end) {
+                fprintf(file, "%02x ", (unsigned char)byte[i]);
+            }
+            else {
+                fprintf(file, "   ");
+            }
+        }
+        fprintf(file, " ");
+        for (int i = 0; i < offset; i++) {
+            if (byte + i < (char *)self->end) {
+                fprintf(file, "%c", isprint(byte[i]) ? byte[i] : '.');
+            }
+        }
+        fprintf(file, "\n");
+    }
+}
+
+void arena_dump(const Arena *self, const char *fname)
+{
+    assert(self && fname);
+
+    FILE *file = fopen(fname, "w");
+    assert(file);
+
+    int offset = 16;
+    dump(self, file, offset);
+
+    fclose(file);
 }
