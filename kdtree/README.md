@@ -17,9 +17,9 @@ operations.
 **`kdtree_init`** Build a tree from a set of points stored in row-major order. The leaf size
 controls how many points are stored in leaf nodes (0 uses the default of 16). Only Euclidean
 distance is supported. Optionally accepts per-dimension box lengths to enable periodic boundary
-conditions (minimum image convention); points do not need to be pre-wrapped. Returns 0 if the point
-spread exceeds the periodic box size. The tree holds pointers to the input data and does not copy
-it; all inputs must remain valid for the lifetime of the tree.
+conditions (minimum image convention); points do not need to be pre-wrapped. Returns null if the
+point spread exceeds the periodic box size. The tree holds pointers to the input data and does not
+copy it; all inputs must remain valid for the lifetime of the tree.
 
 **`kdtree_deinit`** Free all memory associated with the tree.
 

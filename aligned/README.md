@@ -11,13 +11,13 @@ compilation flags.
 ## Functions
 
 **`aligned_malloc`** Allocate a number of elements with a given alignment (must be a power of 2; 0
-uses the default of 64). Returns 0 if the count is 0. Free with `aligned_free`.
+uses the default of 64). Returns null if the count is 0. Free with `aligned_free`.
 
 **`aligned_calloc`** Like `aligned_malloc`, but zero-initializes the allocation.
 
 **`aligned_realloc`** Resize a previous allocation. Data is preserved up to the smaller of the old
 and new sizes. If the alignment is 0, the original alignment is preserved. A null pointer behaves
-like `aligned_malloc`; a count of 0 frees the pointer and returns 0.
+like `aligned_malloc`; a count of 0 frees the pointer and returns null.
 
 **`aligned_free`** Free a pointer returned by any of the above functions.
 

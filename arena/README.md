@@ -22,13 +22,13 @@ arena.
 the save. Grown chunks allocated after the save are freed.
 
 **`arena_malloc`** Allocate a number of elements of a given size and alignment. The alignment must
-be a power of two; 0 uses the default. Returns 0 if the count is 0.
+be a power of two; 0 uses the default. Returns null if the count is 0.
 
 **`arena_calloc`** Like `arena_malloc`, but zero-initializes the allocation.
 
 **`arena_resize`** Resize the most recent allocation. Grows or shrinks in place if there is room;
 otherwise moves the allocation to a new chunk and copies the data. A null pointer behaves like
-`arena_malloc`; a count of 0 frees the allocation and returns 0.
+`arena_malloc`; a count of 0 frees the allocation and returns null.
 
 ## Implementation notes
 
