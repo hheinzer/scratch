@@ -36,24 +36,26 @@ void defer_deinit(Defer *self)
     free(self);
 }
 
-void defer_push(Defer *self, void *ptr, void (*func)(void *))
+void *defer_push(Defer *self, void *ptr, void (*func)(void *))
 {
-    assert(self && func);
+    assert(self && ptr && func);
     Item *next = malloc(sizeof(*next));
     assert(next);
     next->ptr = ptr;
     next->func = func;
     next->prev = self->item;
     self->item = next;
+    return ptr;
 }
 
-void defer_pop(Defer *self, void *ptr)
+void *defer_pop(Defer *self, void *ptr)
 {
     assert(self && ptr);
-    for (Item *cur = self->item; cur; cur = cur->prev) {
-        if (cur->ptr == ptr) {
-            cur->func = 0;
-            return;
+    for (Item *item = self->item; item; item = item->prev) {
+        if (item->ptr == ptr) {
+            item->func = 0;
+            break;
         }
     }
+    return ptr;
 }

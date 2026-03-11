@@ -28,8 +28,7 @@ static void test_pop(void)
     assert(ptr);
     defer_push(defer, ptr, free);
 
-    defer_pop(defer, ptr);
-    free(ptr);
+    free(defer_pop(defer, ptr));
 
     defer_deinit(defer);
 }
@@ -51,8 +50,7 @@ static void test_pop_middle(void)
     assert(third);
     defer_push(defer, third, free);
 
-    defer_pop(defer, second);
-    free(second);
+    free(defer_pop(defer, second));
 
     defer_deinit(defer);
 }
@@ -67,8 +65,7 @@ static void test_pop_not_found(void)
     defer_push(defer, ptr, free);
 
     int *other = malloc(sizeof(*other));
-    defer_pop(defer, other);
-    free(other);
+    free(defer_pop(defer, other));
 
     defer_deinit(defer);
 }
@@ -77,8 +74,7 @@ static int *alloc_int(Defer *defer)
 {
     int *ptr = malloc(sizeof(*ptr));
     assert(ptr);
-    defer_push(defer, ptr, free);
-    return ptr;
+    return defer_push(defer, ptr, free);
 }
 
 static void test_returned_from_function(void)

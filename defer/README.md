@@ -14,10 +14,10 @@ compilation flags.
 
 **`defer_deinit`** Run all deferred calls in LIFO order, then free the stack.
 
-**`defer_push`** Push a deferred call onto the stack.
+**`defer_push`** Push a deferred call onto the stack. Returns the pointer.
 
 **`defer_pop`** Cancel the deferred call associated with a given pointer without running it. Scans
-the stack for the first matching entry and cancels it. No-op if the pointer is not found.
+the stack for the first matching entry and cancels it. Returns the pointer.
 
 ## Implementation notes
 
