@@ -66,12 +66,14 @@ struct tensor {
 
 // memory
 
+enum { MAX_SAVE = 1024 };
+
 typedef struct stack {
     void *ptr;
     struct stack *prev;
 } Stack;
 
-static Stack *head = 0;
+static Stack *g_head = 0;
 
 static void *stack_malloc(size_t num, size_t size)
 {
@@ -83,8 +85,8 @@ static void *stack_malloc(size_t num, size_t size)
     assert(next);
     next->ptr = malloc(num * size);
     assert(next->ptr);
-    next->prev = head;
-    head = next;
+    next->prev = g_head;
+    g_head = next;
     return next->ptr;
 }
 
@@ -100,26 +102,39 @@ static void *stack_memdup(const void *ptr, size_t num, size_t size)
     return (dup && ptr) ? memcpy(dup, ptr, num * size) : 0;
 }
 
+static int g_idx_save = 0;
+static Stack *g_save[MAX_SAVE];
+
 static void *stack_pop(void)
 {
-    if (!head) {
-        return 0;
-    }
-    void *ptr = head->ptr;
-    Stack *prev = head->prev;
-    free(head);
-    head = prev;
+    assert(g_head);
+    void *ptr = g_head->ptr;
+    Stack *prev = g_head->prev;
+    free(g_head);
+    g_head = prev;
     return ptr;
 }
 
-static void stack_clear(void *until)
+static void stack_clear(void)
 {
-    while (head) {
-        void *ptr = stack_pop();
-        free(ptr);
-        if (ptr == until) {
-            break;
-        }
+    while (g_head) {
+        free(stack_pop());
+    }
+    g_idx_save = 0;
+}
+
+static void stack_save(void)
+{
+    assert(g_idx_save < MAX_SAVE);
+    g_save[g_idx_save++] = g_head;
+}
+
+static void stack_restore(void)
+{
+    assert(g_idx_save - 1 >= 0);
+    Stack *save = g_save[--g_idx_save];
+    while (g_head != save) {
+        free(stack_pop());
     }
 }
 
@@ -754,9 +769,9 @@ void tensor_print(const Tensor *self)
 
 // test
 
-int main(void)
+static void test_movement(void)
 {
-    srand(time(0));
+    stack_save();
 
     Tensor *ten = tensor_range(1, 16, 1);
     tensor_print(ten);
@@ -791,5 +806,10 @@ int main(void)
     ten = tensor_expand(ten, (int[]){2, -1, -1}, 3);
     tensor_print(ten);
 
-    stack_clear(0);
+    stack_restore();
+}
+
+int main(void)
+{
+    test_movement();
 }
