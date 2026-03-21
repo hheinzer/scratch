@@ -23,13 +23,13 @@ Tensor *tensor_normal(const int *shape, int ndim, float mean, float std);
 
 // movement
 
-Tensor *tensor_clone(const Tensor *src);
-Tensor *tensor_contiguous(const Tensor *src);
-Tensor *tensor_view(const Tensor *src, const int *shape, int ndim);
 Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim);
-Tensor *tensor_unsqueeze(const Tensor *src, int dim);
+Tensor *tensor_flatten(const Tensor *src, int beg_dim, int end_dim);
+Tensor *tensor_flatten_all(const Tensor *src);
+Tensor *tensor_unflatten(const Tensor *src, int dim, const int *size, int num);
 Tensor *tensor_squeeze(const Tensor *src, int dim);
 Tensor *tensor_squeeze_all(const Tensor *src);
+Tensor *tensor_unsqueeze(const Tensor *src, int dim);
 Tensor *tensor_permute(const Tensor *src, const int *order);
 Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1);
 Tensor *tensor_cat(const Tensor **src, int num, int dim);
@@ -90,6 +90,12 @@ static void *stack_calloc(size_t num, size_t size)
 {
     void *ptr = stack_malloc(num, size);
     return ptr ? memset(ptr, 0, num * size) : 0;
+}
+
+static void *stack_memdup(const void *ptr, size_t num, size_t size)
+{
+    void *dup = stack_malloc(num, size);
+    return (dup && ptr) ? memcpy(dup, ptr, num * size) : 0;
 }
 
 static void stack_clear(void *until)
@@ -315,32 +321,28 @@ Tensor *tensor_normal(const int *shape, int ndim, float mean, float std)
 
 // movement
 
-static void copy_data(const Tensor *src, Tensor *out, int dim, long off_src, long off_out)
+static void normalize_shape(int *out_shape, const int *shape, int ndim, long numel)
 {
-    if (dim == src->ndim - 1) {
-        if (src->stride[dim] == 1) {
-            memcpy(out->data + off_out, src->data + off_src, src->shape[dim] * sizeof(*src->data));
+    int index = -1;
+    long product = 1;
+    for (int i = 0; i < ndim; i++) {
+        if (shape[i] == -1) {
+            assert(index == -1);
+            index = i;
         }
         else {
-            for (int i = 0; i < src->shape[dim]; i++) {
-                out->data[off_out + i] = src->data[off_src + (i * src->stride[dim])];
-            }
+            assert(shape[i] > 0);
+            product *= shape[i];
         }
+        out_shape[i] = shape[i];
+    }
+    if (index != -1) {
+        assert(product > 0 && numel % product == 0);
+        out_shape[index] = (int)(numel / product);
     }
     else {
-        for (int i = 0; i < src->shape[dim]; i++) {
-            copy_data(src, out, dim + 1, off_src + (i * src->stride[dim]),
-                      off_out + (i * out->stride[dim]));
-        }
+        assert(product == numel);
     }
-}
-
-Tensor *tensor_clone(const Tensor *src)
-{
-    assert(src);
-    Tensor *out = tensor_empty(src->shape, src->ndim);
-    copy_data(src, out, 0, 0, 0);
-    return out;
 }
 
 static int is_contiguous(const Tensor *src)
@@ -355,34 +357,54 @@ static int is_contiguous(const Tensor *src)
     return 1;
 }
 
-Tensor *tensor_contiguous(const Tensor *src)
+static void pack_data(const Tensor *src, Tensor *out, int dim, long off_src, long *offset)
 {
-    assert(src);
-    return is_contiguous(src) ? (Tensor *)src : tensor_clone(src);
-}
-
-static int valid_view(const Tensor *src, const int *shape, int ndim)
-{
-    return valid_shape(shape, ndim) && compute_numel(shape, ndim) == src->numel;
-}
-
-Tensor *tensor_view(const Tensor *src, const int *shape, int ndim)
-{
-    assert(src && is_contiguous(src) && valid_view(src, shape, ndim));
-    Tensor *out = stack_calloc(1, sizeof(*out));
-    out->ndim = ndim;
-    out->numel = src->numel;
-    if (ndim > 0) {
-        memcpy(out->shape, shape, ndim * sizeof(*shape));
-        compute_stride(out->stride, shape, ndim);
+    if (dim == src->ndim - 1) {
+        long off_out = *offset;
+        if (src->stride[dim] == 1) {
+            memcpy(out->data + off_out, src->data + off_src, src->shape[dim] * sizeof(*src->data));
+        }
+        else {
+            for (int i = 0; i < src->shape[dim]; i++) {
+                out->data[off_out + i] = src->data[off_src + (i * src->stride[dim])];
+            }
+        }
+        *offset += src->shape[dim];
     }
-    out->data = src->data;
-    return out;
+    else {
+        for (int i = 0; i < src->shape[dim]; i++) {
+            pack_data(src, out, dim + 1, off_src + (i * src->stride[dim]), offset);
+        }
+    }
 }
 
 Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim)
 {
-    return tensor_view(tensor_contiguous(src), shape, ndim);
+    assert(src && ndim >= 0 && ndim <= MAX_NDIM);
+    Tensor *out = stack_calloc(1, sizeof(*out));
+    out->ndim = ndim;
+    out->numel = src->numel;
+    if (ndim > 0) {
+        normalize_shape(out->shape, shape, ndim, src->numel);
+        compute_stride(out->stride, out->shape, ndim);
+    }
+    else {
+        assert(src->numel == 1);
+    }
+    if (is_contiguous(src)) {
+        out->data = src->data;
+    }
+    else {
+        out->data = stack_malloc(out->numel, sizeof(*out->data));
+        if (src->ndim == 0) {
+            out->data[0] = src->data[0];
+        }
+        else {
+            long offset = 0;
+            pack_data(src, out, 0, 0, &offset);
+        }
+    }
+    return out;
 }
 
 static int normalize_dim(int dim, int ndim)
@@ -391,19 +413,53 @@ static int normalize_dim(int dim, int ndim)
     return (dim < 0) ? (dim + ndim) : dim;
 }
 
-Tensor *tensor_unsqueeze(const Tensor *src, int dim)
+Tensor *tensor_flatten(const Tensor *src, int beg_dim, int end_dim)
 {
-    assert(src && src->ndim < MAX_NDIM);
-    dim = normalize_dim(dim, src->ndim + 1);
+    assert(src);
+    beg_dim = normalize_dim(beg_dim, src->ndim);
+    end_dim = normalize_dim(end_dim, src->ndim);
+    assert(beg_dim <= end_dim);
     int shape[MAX_NDIM];
+    int ndim = 0;
+    for (int i = 0; i < beg_dim; i++) {
+        shape[ndim++] = src->shape[i];
+    }
+    int flat = 1;
+    for (int i = beg_dim; i <= end_dim; i++) {
+        flat *= src->shape[i];
+    }
+    shape[ndim++] = flat;
+    for (int i = end_dim + 1; i < src->ndim; i++) {
+        shape[ndim++] = src->shape[i];
+    }
+    return tensor_reshape(src, shape, ndim);
+}
+
+Tensor *tensor_flatten_all(const Tensor *src)
+{
+    return tensor_reshape(src, (int[]){-1}, 1);
+}
+
+Tensor *tensor_unflatten(const Tensor *src, int dim, const int *size, int num)
+{
+    assert(src && size && num > 0 && src->ndim + num - 1 <= MAX_NDIM);
+    dim = normalize_dim(dim, src->ndim);
+    int shape[MAX_NDIM];
+    int ndim = 0;
     for (int i = 0; i < dim; i++) {
-        shape[i] = src->shape[i];
+        shape[ndim++] = src->shape[i];
     }
-    shape[dim] = 1;
-    for (int i = dim; i < src->ndim; i++) {
-        shape[i + 1] = src->shape[i];
+    int unflat = 1;
+    for (int i = 0; i < num; i++) {
+        assert(size[i] > 0);
+        shape[ndim++] = size[i];
+        unflat *= size[i];
     }
-    return tensor_reshape(src, shape, src->ndim + 1);
+    assert(unflat == src->shape[dim]);
+    for (int i = dim + 1; i < src->ndim; i++) {
+        shape[ndim++] = src->shape[i];
+    }
+    return tensor_reshape(src, shape, ndim);
 }
 
 Tensor *tensor_squeeze(const Tensor *src, int dim)
@@ -411,35 +467,85 @@ Tensor *tensor_squeeze(const Tensor *src, int dim)
     assert(src);
     dim = normalize_dim(dim, src->ndim);
     assert(src->shape[dim] == 1);
-    int shape[MAX_NDIM];
-    for (int i = 0; i < dim; i++) {
-        shape[i] = src->shape[i];
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    out->ndim -= 1;
+    for (int i = dim; i < src->ndim - 1; i++) {
+        out->shape[i] = src->shape[i + 1];
+        out->stride[i] = src->stride[i + 1];
     }
-    for (int i = dim; i < src->ndim; i++) {
-        shape[i] = src->shape[i + 1];
-    }
-    return tensor_reshape(src, shape, src->ndim - 1);
+    return out;
 }
 
 Tensor *tensor_squeeze_all(const Tensor *src)
 {
     assert(src);
-    int shape[MAX_NDIM];
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
     int ndim = 0;
     for (int i = 0; i < src->ndim; i++) {
         if (src->shape[i] != 1) {
-            shape[ndim++] = src->shape[i];
+            out->shape[ndim] = src->shape[i];
+            out->stride[ndim] = src->stride[i];
+            ndim += 1;
         }
     }
-    return tensor_reshape(src, shape, ndim);
+    out->ndim = ndim;
+    return out;
 }
 
-Tensor *tensor_permute(const Tensor *src, const int *order)
+Tensor *tensor_unsqueeze(const Tensor *src, int dim)
 {
+    assert(src && src->ndim < MAX_NDIM);
+    dim = normalize_dim(dim, src->ndim + 1);
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    out->ndim += 1;
+    for (int i = src->ndim; i > dim; i--) {
+        out->shape[i] = src->shape[i - 1];
+        out->stride[i] = src->stride[i - 1];
+    }
+    out->shape[dim] = 1;
+    out->stride[dim] = (dim < src->ndim) ? src->stride[dim] : 1;
+    return out;
+}
+
+static int valid_permute(const Tensor *src, const int *order)
+{
+    int seen[MAX_NDIM] = {0};
+    for (int i = 0; i < src->ndim; i++) {
+        if (order[i] < 0 || order[i] >= src->ndim || seen[order[i]]) {
+            return 0;
+        }
+        seen[order[i]] = 1;
+    }
+    return 1;
+}
+
+Tensor *tensor_permute(const Tensor *src, const int *order_)
+{
+    assert(src && order_);
+    int order[MAX_NDIM];
+    for (int i = 0; i < src->ndim; i++) {
+        order[i] = normalize_dim(order_[i], src->ndim);
+    }
+    assert(valid_permute(src, order));
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    for (int i = 0; i < src->ndim; i++) {
+        out->shape[i] = src->shape[order[i]];
+        out->stride[i] = src->stride[order[i]];
+    }
+    return out;
 }
 
 Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1)
 {
+    assert(src);
+    dim0 = normalize_dim(dim0, src->ndim);
+    dim1 = normalize_dim(dim1, src->ndim);
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    out->shape[dim0] = src->shape[dim1];
+    out->shape[dim1] = src->shape[dim0];
+    out->stride[dim0] = src->stride[dim1];
+    out->stride[dim1] = src->stride[dim0];
+    return out;
 }
 
 Tensor *tensor_cat(const Tensor **src, int num, int dim)
@@ -506,16 +612,22 @@ int main(void)
 {
     srand(time(0));
 
-    Tensor *ten = tensor_range(1, 9, 1);
+    Tensor *ten = tensor_range(1, 16, 1);
     tensor_print(ten);
 
-    ten = tensor_reshape(ten, (int[]){3, 3}, 2);
+    ten = tensor_reshape(ten, (int[]){4, 4}, 2);
     tensor_print(ten);
 
-    ten = tensor_unsqueeze(ten, -1);
+    ten = tensor_unsqueeze(ten, -2);
     tensor_print(ten);
 
     ten = tensor_squeeze_all(ten);
+    tensor_print(ten);
+
+    ten = tensor_transpose(ten, 0, -1);
+    tensor_print(ten);
+
+    ten = tensor_flatten_all(ten);
     tensor_print(ten);
 
     stack_clear(0);
