@@ -32,6 +32,8 @@ Tensor *tensor_squeeze_all(const Tensor *src);
 Tensor *tensor_unsqueeze(const Tensor *src, int dim);
 Tensor *tensor_permute(const Tensor *src, const int *order);
 Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1);
+Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step);
+Tensor *tensor_select(const Tensor *src, int dim, int index);
 Tensor *tensor_cat(const Tensor **src, int num, int dim);
 Tensor *tensor_stack(const Tensor **src, int num, int dim);
 
@@ -44,6 +46,7 @@ void tensor_print(const Tensor *self);
 //
 
 #include <assert.h>
+#include <limits.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -98,14 +101,20 @@ static void *stack_memdup(const void *ptr, size_t num, size_t size)
     return (dup && ptr) ? memcpy(dup, ptr, num * size) : 0;
 }
 
+static void *stack_pop(void)
+{
+    void *ptr = head->ptr;
+    Stack *prev = head->prev;
+    free(head);
+    head = prev;
+    return ptr;
+}
+
 static void stack_clear(void *until)
 {
     while (head) {
-        void *ptr = head->ptr;
+        void *ptr = stack_pop();
         free(ptr);
-        Stack *prev = head->prev;
-        free(head);
-        head = prev;
         if (ptr == until) {
             return;
         }
@@ -548,12 +557,113 @@ Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1)
     return out;
 }
 
+Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
+{
+    assert(src && step != 0);
+    dim = normalize_dim(dim, src->ndim);
+    int size = src->shape[dim];
+    if (beg == INT_MIN) {
+        beg = (step > 0) ? 0 : (size - 1);
+    }
+    if (end == INT_MAX) {
+        end = (step > 0) ? size : -1;
+    }
+    if (beg < 0) {
+        beg += size;
+    }
+    if (end < 0 && end != -1) {
+        end += size;
+    }
+    assert(0 <= beg && beg < size);
+    if (step > 0) {
+        assert(beg <= end && end <= size);
+    }
+    else {
+        assert(-1 <= end && end <= beg);
+    }
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    out->data += beg * src->stride[dim];
+    if (step > 0) {
+        out->shape[dim] = (end - beg + step - 1) / step;
+    }
+    else {
+        out->shape[dim] = (end - beg + step + 1) / step;
+    }
+    out->stride[dim] *= step;
+    out->numel = compute_numel(out->shape, out->ndim);
+    return out;
+}
+
+Tensor *tensor_select(const Tensor *src, int dim, int index)
+{
+    return tensor_squeeze(tensor_slice(src, dim, index, index + 1, 1), dim);
+}
+
+static int valid_cat(const Tensor **src, int num, int dim)
+{
+    int ndim = src[0]->ndim;
+    for (int i = 1; i < num; i++) {
+        if (!src[i] || src[i]->ndim != ndim) {
+            return 0;
+        }
+        for (int j = 0; j < ndim; j++) {
+            if (j != dim && src[i]->shape[j] != src[0]->shape[j]) {
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+static void cat_data(const Tensor *src, Tensor *dst, int dim, long off_src, long off_dst)
+{
+    if (dim == src->ndim - 1) {
+        if (src->stride[dim] == 1 && dst->stride[dim] == 1) {
+            memcpy(dst->data + off_dst, src->data + off_src, src->shape[dim] * sizeof(*src->data));
+        }
+        else {
+            for (int i = 0; i < src->shape[dim]; i++) {
+                dst->data[off_dst + (i * dst->stride[dim])] =
+                    src->data[off_src + (i * src->stride[dim])];
+            }
+        }
+    }
+    else {
+        for (int i = 0; i < src->shape[dim]; i++) {
+            cat_data(src, dst, dim + 1, off_src + (i * src->stride[dim]),
+                     off_dst + (i * dst->stride[dim]));
+        }
+    }
+}
+
 Tensor *tensor_cat(const Tensor **src, int num, int dim)
 {
+    assert(src && src[0] && src[0]->ndim > 0 && num > 0);
+    int ndim = src[0]->ndim;
+    dim = normalize_dim(dim, ndim);
+    assert(valid_cat(src, num, dim));
+    int shape[MAX_NDIM];
+    memcpy(shape, src[0]->shape, ndim * sizeof(*src[0]->shape));
+    for (int i = 1; i < num; i++) {
+        shape[dim] += src[i]->shape[dim];
+    }
+    Tensor *out = tensor_empty(shape, ndim);
+    long offset = 0;
+    for (int i = 0; i < num; i++) {
+        cat_data(src[i], out, 0, 0, offset * out->stride[dim]);
+        offset += src[i]->shape[dim];
+    }
+    return out;
 }
 
 Tensor *tensor_stack(const Tensor **src, int num, int dim)
 {
+    assert(src && src[0] && num > 0);
+    const Tensor *tmp[num];
+    for (int i = 0; i < num; i++) {
+        tmp[i] = tensor_unsqueeze(src[i], dim);
+    }
+    return tensor_cat(tmp, num, dim);
 }
 
 // i/o
@@ -627,7 +737,19 @@ int main(void)
     ten = tensor_transpose(ten, 0, -1);
     tensor_print(ten);
 
+    ten = tensor_slice(ten, 0, INT_MIN, INT_MAX, -1);
+    tensor_print(ten);
+
+    ten = tensor_stack((const Tensor *[]){ten, ten}, 2, 0);
+    tensor_print(ten);
+
     ten = tensor_flatten_all(ten);
+    tensor_print(ten);
+
+    ten = tensor_reshape(ten, (int[]){-1, 4, 4}, 3);
+    tensor_print(ten);
+
+    ten = tensor_select(ten, 0, 0);
     tensor_print(ten);
 
     stack_clear(0);
