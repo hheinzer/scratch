@@ -32,6 +32,7 @@ Tensor *tensor_permute(const Tensor *src, const int *order);
 Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1);
 Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step);
 Tensor *tensor_select(const Tensor *src, int dim, int index);
+Tensor *tensor_expand(const Tensor *src, const int *shape, int ndim);
 Tensor *tensor_cat(const Tensor **src, int num, int dim);
 Tensor *tensor_stack(const Tensor **src, int num, int dim);
 
@@ -67,7 +68,6 @@ struct tensor {
 
 typedef struct stack {
     void *ptr;
-    size_t bytes;
     struct stack *prev;
 } Stack;
 
@@ -83,7 +83,6 @@ static void *stack_malloc(size_t num, size_t size)
     assert(next);
     next->ptr = malloc(num * size);
     assert(next->ptr);
-    next->bytes = num * size;
     next->prev = head;
     head = next;
     return next->ptr;
@@ -103,7 +102,9 @@ static void *stack_memdup(const void *ptr, size_t num, size_t size)
 
 static void *stack_pop(void)
 {
-    assert(head);
+    if (!head) {
+        return 0;
+    }
     void *ptr = head->ptr;
     Stack *prev = head->prev;
     free(head);
@@ -113,16 +114,13 @@ static void *stack_pop(void)
 
 static void stack_clear(void *until)
 {
-    size_t bytes = 0;
     while (head) {
-        bytes += head->bytes;
         void *ptr = stack_pop();
         free(ptr);
         if (ptr == until) {
             break;
         }
     }
-    printf("cleared %zu bytes\n", bytes);
 }
 
 // creation
@@ -589,6 +587,54 @@ Tensor *tensor_select(const Tensor *src, int dim, int index)
     return tensor_squeeze(tensor_slice(src, dim, index, index + 1, 1), dim);
 }
 
+static int valid_expand(const Tensor *src, const int *shape, int ndim)
+{
+    if (ndim < src->ndim) {
+        return 0;
+    }
+    int offset = ndim - src->ndim;
+    for (int i = 0; i < src->ndim; i++) {
+        if (src->shape[i] != 1 && src->shape[i] != shape[offset + i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+Tensor *tensor_expand(const Tensor *src, const int *shape_, int ndim)
+{
+    assert(src && ndim >= 0 && ndim <= MAX_NDIM);
+    int shape[MAX_NDIM];
+    int offset = ndim - src->ndim;
+    for (int i = 0; i < ndim; i++) {
+        if (i >= offset && shape_[i] == -1) {
+            shape[i] = src->shape[i - offset];
+        }
+        else {
+            shape[i] = shape_[i];
+        }
+    }
+    assert(valid_shape(shape, ndim) && valid_expand(src, shape, ndim));
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    out->ndim = ndim;
+    out->numel = compute_numel(shape, ndim);
+    memcpy(out->shape, shape, ndim * sizeof(*shape));
+    for (int i = 0; i < ndim; i++) {
+        if (i < offset) {
+            out->stride[i] = 0;
+        }
+        else {
+            if (src->shape[i - offset] == shape[i]) {
+                out->stride[i] = src->stride[i - offset];
+            }
+            else {
+                out->stride[i] = 0;
+            }
+        }
+    }
+    return out;
+}
+
 static int valid_cat(const Tensor **src, int num, int dim)
 {
     int ndim = src[0]->ndim;
@@ -740,6 +786,9 @@ int main(void)
     tensor_print(ten);
 
     ten = tensor_select(ten, 0, 0);
+    tensor_print(ten);
+
+    ten = tensor_expand(ten, (int[]){2, -1, -1}, 3);
     tensor_print(ten);
 
     stack_clear(0);
