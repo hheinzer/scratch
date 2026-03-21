@@ -18,8 +18,6 @@ Tensor *tensor_eye(int rows, int cols);
 Tensor *tensor_from(const int *shape, int ndim, const float *data);
 Tensor *tensor_rand(const int *shape, int ndim);
 Tensor *tensor_randn(const int *shape, int ndim);
-Tensor *tensor_uniform(const int *shape, int ndim, float low, float high);
-Tensor *tensor_normal(const int *shape, int ndim, float mean, float std);
 
 // movement
 
@@ -69,6 +67,7 @@ struct tensor {
 
 typedef struct stack {
     void *ptr;
+    size_t bytes;
     struct stack *prev;
 } Stack;
 
@@ -84,6 +83,7 @@ static void *stack_malloc(size_t num, size_t size)
     assert(next);
     next->ptr = malloc(num * size);
     assert(next->ptr);
+    next->bytes = num * size;
     next->prev = head;
     head = next;
     return next->ptr;
@@ -103,6 +103,7 @@ static void *stack_memdup(const void *ptr, size_t num, size_t size)
 
 static void *stack_pop(void)
 {
+    assert(head);
     void *ptr = head->ptr;
     Stack *prev = head->prev;
     free(head);
@@ -112,13 +113,16 @@ static void *stack_pop(void)
 
 static void stack_clear(void *until)
 {
+    size_t bytes = 0;
     while (head) {
+        bytes += head->bytes;
         void *ptr = stack_pop();
         free(ptr);
         if (ptr == until) {
-            return;
+            break;
         }
     }
+    printf("cleared %zu bytes\n", bytes);
 }
 
 // creation
@@ -198,6 +202,10 @@ Tensor *tensor_arange(float start, float stop, float step)
 {
     assert(step != 0);
     int numel = (int)ceilf((stop - start) / step);
+    float last = start + ((float)(numel - 1) * step);
+    if (numel > 0 && ((step > 0 && last >= stop) || (step < 0 && last <= stop))) {
+        numel -= 1;
+    }
     assert(numel > 0);
     Tensor *out = tensor_empty((int[]){numel}, 1);
     for (int i = 0; i < numel; i++) {
@@ -210,6 +218,10 @@ Tensor *tensor_range(float start, float stop, float step)
 {
     assert(step != 0);
     int numel = (int)ceilf((stop - start) / step) + 1;
+    float last = start + ((float)(numel - 1) * step);
+    if (numel > 1 && ((step > 0 && last > stop) || (step < 0 && last < stop))) {
+        numel -= 1;
+    }
     assert(numel > 0);
     Tensor *out = tensor_empty((int[]){numel}, 1);
     for (int i = 0; i < numel; i++) {
@@ -236,7 +248,7 @@ Tensor *tensor_linspace(float start, float stop, int steps)
 
 Tensor *tensor_logspace(float base, float start, float stop, int steps)
 {
-    assert(steps > 0);
+    assert(steps > 0 && base > 0);
     Tensor *out = tensor_empty((int[]){steps}, 1);
     if (steps == 1) {
         out->data[0] = powf(base, start);
@@ -305,25 +317,6 @@ Tensor *tensor_randn(const int *shape, int ndim)
     if (out->numel % 2 != 0) {
         float dummy;
         random_normal(&out->data[out->numel - 1], &dummy);
-    }
-    return out;
-}
-
-Tensor *tensor_uniform(const int *shape, int ndim, float low, float high)
-{
-    Tensor *out = tensor_rand(shape, ndim);
-    for (long i = 0; i < out->numel; i++) {
-        out->data[i] = low + (out->data[i] * (high - low));
-    }
-    return out;
-}
-
-Tensor *tensor_normal(const int *shape, int ndim, float mean, float std)
-{
-    assert(std >= 0);
-    Tensor *out = tensor_randn(shape, ndim);
-    for (long i = 0; i < out->numel; i++) {
-        out->data[i] = mean + (out->data[i] * std);
     }
     return out;
 }
@@ -405,13 +398,8 @@ Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim)
     }
     else {
         out->data = stack_malloc(out->numel, sizeof(*out->data));
-        if (src->ndim == 0) {
-            out->data[0] = src->data[0];
-        }
-        else {
-            long offset = 0;
-            pack_data(src, out, 0, 0, &offset);
-        }
+        long offset = 0;
+        pack_data(src, out, 0, 0, &offset);
     }
     return out;
 }
@@ -596,6 +584,8 @@ Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
 
 Tensor *tensor_select(const Tensor *src, int dim, int index)
 {
+    dim = normalize_dim(dim, src->ndim);
+    index = normalize_dim(index, src->shape[dim]);
     return tensor_squeeze(tensor_slice(src, dim, index, index + 1, 1), dim);
 }
 
