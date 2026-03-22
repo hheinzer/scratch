@@ -36,6 +36,21 @@ Tensor *tensor_expand(const Tensor *src, const int *shape, int ndim);
 Tensor *tensor_cat(const Tensor **src, int num, int dim);
 Tensor *tensor_stack(const Tensor **src, int num, int dim);
 
+// unary
+
+Tensor *tensor_neg(const Tensor *src);
+Tensor *tensor_abs(const Tensor *src);
+Tensor *tensor_sign(const Tensor *src);
+Tensor *tensor_square(const Tensor *src);
+Tensor *tensor_sqrt(const Tensor *src);
+Tensor *tensor_rsqrt(const Tensor *src);
+Tensor *tensor_exp(const Tensor *src);
+Tensor *tensor_log(const Tensor *src);
+Tensor *tensor_relu(const Tensor *src);
+Tensor *tensor_sigmoid(const Tensor *src);
+Tensor *tensor_tanh(const Tensor *src);
+Tensor *tensor_logical_not(const Tensor *src);
+
 // binary
 
 Tensor *tensor_add(const Tensor *lhs, const Tensor *rhs);
@@ -736,6 +751,184 @@ Tensor *tensor_stack(const Tensor **src, int num, int dim)
     return tensor_cat(tmp, num, dim);
 }
 
+// unary
+
+typedef void Unary(float *, const float *, long, int);
+
+static void unary_neg(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = -src[i * str_src];
+    }
+}
+
+static void unary_abs(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = fabsf(src[i * str_src]);
+    }
+}
+
+static void unary_sign(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        float val = src[i * str_src];
+        out[i] = (float)((val > 0) - (val < 0));
+    }
+}
+
+static void unary_square(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        float val = src[i * str_src];
+        out[i] = val * val;
+    }
+}
+
+static void unary_sqrt(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = sqrtf(src[i * str_src]);
+    }
+}
+
+static void unary_rsqrt(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = 1 / sqrtf(src[i * str_src]);
+    }
+}
+
+static void unary_exp(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = expf(src[i * str_src]);
+    }
+}
+
+static void unary_log(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = logf(src[i * str_src]);
+    }
+}
+
+static void unary_relu(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        float val = src[i * str_src];
+        out[i] = (val > 0) ? val : 0;
+    }
+}
+
+static void unary_sigmoid(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = 1 / (1 + expf(-src[i * str_src]));
+    }
+}
+
+static void unary_tanh(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = tanhf(src[i * str_src]);
+    }
+}
+
+static void unary_logical_not(float *out, const float *src, long str_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (src[i * str_src] == 0) ? 1 : 0;
+    }
+}
+
+static void apply_unary(Tensor *out, long off_out, const Tensor *src, long off_src, int dim,
+                        Unary *func)
+{
+    if (dim == out->ndim - 1) {
+        func(out->data + off_out, src->data + off_src, src->stride[dim], out->shape[dim]);
+    }
+    else {
+        for (int i = 0; i < out->shape[dim]; i++) {
+            apply_unary(out, off_out + (i * out->stride[dim]), src,
+                        off_src + (i * src->stride[dim]), dim + 1, func);
+        }
+    }
+}
+
+static Tensor *unary(const Tensor *src, Unary *func)
+{
+    assert(src && func);
+    Tensor *out = tensor_empty(src->shape, src->ndim);
+    if (src->ndim == 0) {
+        func(out->data, src->data, 0, 1);
+    }
+    else {
+        apply_unary(out, 0, src, 0, 0, func);
+    }
+    return out;
+}
+
+Tensor *tensor_neg(const Tensor *src)
+{
+    return unary(src, unary_neg);
+}
+
+Tensor *tensor_abs(const Tensor *src)
+{
+    return unary(src, unary_abs);
+}
+
+Tensor *tensor_sign(const Tensor *src)
+{
+    return unary(src, unary_sign);
+}
+
+Tensor *tensor_square(const Tensor *src)
+{
+    return unary(src, unary_square);
+}
+
+Tensor *tensor_sqrt(const Tensor *src)
+{
+    return unary(src, unary_sqrt);
+}
+
+Tensor *tensor_rsqrt(const Tensor *src)
+{
+    return unary(src, unary_rsqrt);
+}
+
+Tensor *tensor_exp(const Tensor *src)
+{
+    return unary(src, unary_exp);
+}
+
+Tensor *tensor_log(const Tensor *src)
+{
+    return unary(src, unary_log);
+}
+
+Tensor *tensor_relu(const Tensor *src)
+{
+    return unary(src, unary_relu);
+}
+
+Tensor *tensor_sigmoid(const Tensor *src)
+{
+    return unary(src, unary_sigmoid);
+}
+
+Tensor *tensor_tanh(const Tensor *src)
+{
+    return unary(src, unary_tanh);
+}
+
+Tensor *tensor_logical_not(const Tensor *src)
+{
+    return unary(src, unary_logical_not);
+}
+
 // binary
 
 typedef void Binary(float *, const float *, long, const float *, long, int);
@@ -776,10 +969,9 @@ static void binary_mod(float *out, const float *lhs, long str_lhs, const float *
                        int num)
 {
     for (int i = 0; i < num; i++) {
-        out[i] = fmodf(lhs[i * str_lhs], rhs[i * str_rhs]);
-        if (out[i] != 0 && (out[i] < 0) != (rhs[i * str_rhs] < 0)) {
-            out[i] += rhs[i * str_rhs];
-        }
+        float val_rhs = rhs[i * str_rhs];
+        float mod = fmodf(lhs[i * str_lhs], val_rhs);
+        out[i] = (mod != 0 && (mod < 0) != (val_rhs < 0)) ? (mod + val_rhs) : mod;
     }
 }
 
@@ -843,7 +1035,7 @@ static void binary_logical_and(float *out, const float *lhs, long str_lhs, const
                                long str_rhs, int num)
 {
     for (int i = 0; i < num; i++) {
-        out[i] = (lhs[i * str_lhs] != 0 && rhs[i * str_rhs] != 0) ? 1 : 0;
+        out[i] = ((lhs[i * str_lhs] != 0) && (rhs[i * str_rhs] != 0)) ? 1 : 0;
     }
 }
 
@@ -851,7 +1043,7 @@ static void binary_logical_or(float *out, const float *lhs, long str_lhs, const 
                               long str_rhs, int num)
 {
     for (int i = 0; i < num; i++) {
-        out[i] = (lhs[i * str_lhs] != 0 || rhs[i * str_rhs] != 0) ? 1 : 0;
+        out[i] = ((lhs[i * str_lhs] != 0) || (rhs[i * str_rhs] != 0)) ? 1 : 0;
     }
 }
 
@@ -1119,6 +1311,7 @@ int main(void)
 {
     test_movement();
     test_operations();
+    stack_clear();
 }
 
 // NOLINTEND(readability-identifier-length)
