@@ -80,6 +80,7 @@ void tensor_print(const Tensor *self);
 //
 
 #include <assert.h>
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
@@ -345,7 +346,7 @@ Tensor *tensor_rand(const int *shape, int ndim)
 
 static void random_normal(float *rn0, float *rn1)
 {
-    float two_pi = 2 * 3.14159265358979323846F;
+    static const float two_pi = 2 * 3.14159265358979323846F;
     float ru1;
     do {
         ru1 = random_uniform();
@@ -1255,63 +1256,398 @@ void tensor_print(const Tensor *self)
 
 // test
 
+#define ensure(cond)                                                                         \
+    do {                                                                                     \
+        if (!(cond)) {                                                                       \
+            fprintf(stderr, "%s:%d %s: `%s` failed\n", __FILE__, __LINE__, __func__, #cond); \
+            abort();                                                                         \
+        }                                                                                    \
+    } while (0)
+
+#define isclose(a, b) (fabsf((a) - (b)) < FLT_EPSILON)
+
 // NOLINTBEGIN(readability-identifier-length)
+
+static void test_creation(void)
+{
+    stack_save();
+
+    // tensor_empty
+    Tensor *t = tensor_empty((int[]){2, 3}, 2);
+    ensure(t->ndim == 2 && t->numel == 6);
+    ensure(t->shape[0] == 2 && t->shape[1] == 3);
+    ensure(t->stride[0] == 3 && t->stride[1] == 1);
+
+    // tensor_empty 0-dim
+    t = tensor_empty(0, 0);
+    ensure(t->ndim == 0 && t->numel == 1);
+
+    // tensor_zeros
+    t = tensor_zeros((int[]){3}, 1);
+    ensure(t->data[0] == 0 && t->data[1] == 0 && t->data[2] == 0);
+
+    // tensor_ones
+    t = tensor_ones((int[]){3}, 1);
+    ensure(t->data[0] == 1 && t->data[1] == 1 && t->data[2] == 1);
+
+    // tensor_fill
+    t = tensor_fill((int[]){3}, 1, 5);
+    ensure(t->data[0] == 5 && t->data[1] == 5 && t->data[2] == 5);
+
+    // tensor_from
+    float data[] = {1, 2, 3, 4};
+    t = tensor_from((int[]){4}, 1, data);
+    ensure(t->data[0] == 1 && t->data[3] == 4);
+    data[0] = 99;
+    ensure(t->data[0] == 1);  // copy, not a reference
+
+    // tensor_arange: [1, 4) -> [1, 2, 3]
+    t = tensor_arange(1, 4, 1);
+    ensure(t->numel == 3);
+    ensure(t->data[0] == 1 && t->data[1] == 2 && t->data[2] == 3);
+
+    // tensor_arange: negative step (3, 0, -1) -> [3, 2, 1]
+    t = tensor_arange(3, 0, -1);
+    ensure(t->numel == 3);
+    ensure(t->data[0] == 3 && t->data[1] == 2 && t->data[2] == 1);
+
+    // tensor_range: [1, 3] -> [1, 2, 3]
+    t = tensor_range(1, 3, 1);
+    ensure(t->numel == 3);
+    ensure(t->data[0] == 1 && t->data[1] == 2 && t->data[2] == 3);
+
+    // tensor_linspace: 0 to 1, 3 steps -> [0, 0.5, 1]
+    t = tensor_linspace(0, 1, 3);
+    ensure(t->numel == 3);
+    ensure(t->data[0] == 0 && isclose(t->data[1], 0.5F) && t->data[2] == 1);
+
+    // tensor_logspace: base 10, 0 to 2, 3 steps -> [1, 10, 100]
+    t = tensor_logspace(10, 0, 2, 3);
+    ensure(t->numel == 3);
+    ensure(isclose(t->data[0], 1) && isclose(t->data[1], 10) && isclose(t->data[2], 100));
+
+    // tensor_eye: 3x2, diagonal is 1
+    t = tensor_eye(3, 2);
+    ensure(t->shape[0] == 3 && t->shape[1] == 2);
+    ensure(t->data[0] == 1 && t->data[1] == 0);  // row 0
+    ensure(t->data[2] == 0 && t->data[3] == 1);  // row 1
+    ensure(t->data[4] == 0 && t->data[5] == 0);  // row 2
+
+    // tensor_rand: values in [0, 1)
+    t = tensor_rand((int[]){100}, 1);
+    ensure(t->numel == 100);
+    for (long i = 0; i < t->numel; i++) {
+        ensure(t->data[i] >= 0 && t->data[i] < 1);
+    }
+
+    // tensor_randn: correct shape
+    t = tensor_randn((int[]){100}, 1);
+    ensure(t->numel == 100);
+
+    stack_restore();
+}
 
 static void test_movement(void)
 {
     stack_save();
 
-    Tensor *t = tensor_range(1, 16, 1);
-    tensor_print(t);
+    // tensor_reshape: [6] -> [2, 3]
+    Tensor *t = tensor_arange(1, 7, 1);
+    t = tensor_reshape(t, (int[]){2, 3}, 2);
+    ensure(t->ndim == 2 && t->shape[0] == 2 && t->shape[1] == 3);
+    ensure(t->data[0] == 1 && t->data[5] == 6);
 
-    t = tensor_reshape(t, (int[]){4, 4}, 2);
-    tensor_print(t);
+    // tensor_reshape: infer dim with -1
+    t = tensor_arange(1, 7, 1);
+    t = tensor_reshape(t, (int[]){-1, 3}, 2);
+    ensure(t->shape[0] == 2 && t->shape[1] == 3);
 
-    t = tensor_unsqueeze(t, -2);
-    tensor_print(t);
+    // tensor_flatten: dims 0..1 of [2, 3] -> [6]
+    t = tensor_arange(1, 7, 1);
+    t = tensor_reshape(t, (int[]){2, 3}, 2);
+    t = tensor_flatten(t, 0, 1);
+    ensure(t->ndim == 1 && t->numel == 6);
 
-    t = tensor_squeeze_all(t);
-    tensor_print(t);
-
-    t = tensor_transpose(t, 0, -1);
-    tensor_print(t);
-
-    t = tensor_slice(t, 0, INT_MIN, INT_MAX, -1);
-    tensor_print(t);
-
-    t = tensor_stack((const Tensor *[]){t, t}, 2, 0);
-    tensor_print(t);
-
+    // tensor_flatten_all
+    t = tensor_arange(1, 7, 1);
+    t = tensor_reshape(t, (int[]){2, 3}, 2);
     t = tensor_flatten_all(t);
-    tensor_print(t);
+    ensure(t->ndim == 1 && t->numel == 6);
 
-    t = tensor_reshape(t, (int[]){-1, 4, 4}, 3);
-    tensor_print(t);
+    // tensor_unflatten: [6] -> [2, 3]
+    t = tensor_arange(1, 7, 1);
+    t = tensor_unflatten(t, 0, (int[]){2, 3}, 2);
+    ensure(t->ndim == 2 && t->shape[0] == 2 && t->shape[1] == 3);
 
-    t = tensor_select(t, 0, 0);
-    tensor_print(t);
+    // tensor_squeeze: [1, 3, 1] remove dim 0 -> [3, 1]
+    t = tensor_zeros((int[]){1, 3, 1}, 3);
+    t = tensor_squeeze(t, 0);
+    ensure(t->ndim == 2 && t->shape[0] == 3 && t->shape[1] == 1);
 
-    t = tensor_expand(t, (int[]){2, -1, -1}, 3);
-    tensor_print(t);
+    // tensor_squeeze: negative dim
+    t = tensor_zeros((int[]){1, 3, 1}, 3);
+    t = tensor_squeeze(t, -1);
+    ensure(t->ndim == 2 && t->shape[0] == 1 && t->shape[1] == 3);
+
+    // tensor_squeeze_all: [1, 3, 1] -> [3]
+    t = tensor_zeros((int[]){1, 3, 1}, 3);
+    t = tensor_squeeze_all(t);
+    ensure(t->ndim == 1 && t->shape[0] == 3);
+
+    // tensor_unsqueeze: [3] insert at 0 -> [1, 3]
+    t = tensor_zeros((int[]){3}, 1);
+    t = tensor_unsqueeze(t, 0);
+    ensure(t->ndim == 2 && t->shape[0] == 1 && t->shape[1] == 3);
+
+    // tensor_permute: [2, 3] -> [3, 2], check strides swapped
+    t = tensor_arange(1, 7, 1);
+    t = tensor_reshape(t, (int[]){2, 3}, 2);
+    t = tensor_permute(t, (int[]){1, 0});
+    ensure(t->shape[0] == 3 && t->shape[1] == 2);
+    ensure(t->stride[0] == 1 && t->stride[1] == 3);
+
+    // tensor_transpose: same as permute for 2D
+    t = tensor_arange(1, 7, 1);
+    t = tensor_reshape(t, (int[]){2, 3}, 2);
+    t = tensor_transpose(t, 0, 1);
+    ensure(t->shape[0] == 3 && t->shape[1] == 2);
+    ensure(t->stride[0] == 1 && t->stride[1] == 3);
+    // element [1][0]: data[1*1 + 0*3] = data[1] = 2
+    ensure(t->data[(t->stride[0] * 1) + (t->stride[1] * 0)] == 2);
+
+    // tensor_slice: [0,1,2,3,4,5] slice [1:4] -> [1,2,3]
+    t = tensor_arange(0, 6, 1);
+    t = tensor_slice(t, 0, 1, 4, 1);
+    ensure(t->numel == 3);
+    ensure(t->data[0] == 1 && t->data[1] == 2 && t->data[2] == 3);
+
+    // tensor_slice: reverse step, stride is -1, access via stride
+    t = tensor_arange(0, 6, 1);
+    t = tensor_slice(t, 0, INT_MIN, INT_MAX, -1);
+    ensure(t->numel == 6 && t->stride[0] == -1);
+    ensure(t->data[0] == 5 && t->data[5 * t->stride[0]] == 0);
+
+    // tensor_slice: negative start index
+    t = tensor_arange(0, 6, 1);
+    t = tensor_slice(t, 0, -4, -2, 1);  // beg=-4->2, end=-2->4 -> [2, 3]
+    ensure(t->numel == 2 && t->data[0] == 2 && t->data[1] == 3);
+
+    // tensor_select: row 1 of [2, 3] -> [4, 5, 6]
+    t = tensor_arange(1, 7, 1);
+    t = tensor_reshape(t, (int[]){2, 3}, 2);
+    t = tensor_select(t, 0, 1);
+    ensure(t->ndim == 1 && t->numel == 3);
+    ensure(t->data[0] == 4 && t->data[1] == 5 && t->data[2] == 6);
+
+    // tensor_select: negative index
+    t = tensor_arange(1, 7, 1);
+    t = tensor_reshape(t, (int[]){2, 3}, 2);
+    t = tensor_select(t, 0, -1);
+    ensure(t->data[0] == 4 && t->data[2] == 6);
+
+    // tensor_expand: [1, 3] -> [2, 3], broadcast dim gets stride 0
+    t = tensor_from((int[]){1, 3}, 2, (float[]){1, 2, 3});
+    t = tensor_expand(t, (int[]){2, 3}, 2);
+    ensure(t->shape[0] == 2 && t->shape[1] == 3 && t->stride[0] == 0);
+    ensure(t->data[t->stride[1] * 0] == 1 && t->data[t->stride[1] * 2] == 3);
+
+    // tensor_expand: -1 preserves dim
+    t = tensor_from((int[]){1, 3}, 2, (float[]){1, 2, 3});
+    t = tensor_expand(t, (int[]){2, -1}, 2);
+    ensure(t->shape[0] == 2 && t->shape[1] == 3);
+
+    // tensor_cat: [[1,2,3], [4,5,6]] along dim 0 -> [1..6]
+    Tensor *a = tensor_arange(1, 4, 1);
+    Tensor *b = tensor_arange(4, 7, 1);
+    t = tensor_cat((const Tensor *[]){a, b}, 2, 0);
+    ensure(t->ndim == 1 && t->numel == 6);
+    ensure(t->data[0] == 1 && t->data[5] == 6);
+
+    // tensor_cat: along dim 1
+    a = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
+    b = tensor_from((int[]){2, 1}, 2, (float[]){5, 6});
+    t = tensor_cat((const Tensor *[]){a, b}, 2, 1);
+    ensure(t->shape[0] == 2 && t->shape[1] == 3);
+    ensure(t->data[2] == 5);  // first element of appended column
+
+    // tensor_stack: stack [1,2,3] and [4,5,6] along dim 0 -> [2, 3]
+    a = tensor_arange(1, 4, 1);
+    b = tensor_arange(4, 7, 1);
+    t = tensor_stack((const Tensor *[]){a, b}, 2, 0);
+    ensure(t->ndim == 2 && t->shape[0] == 2 && t->shape[1] == 3);
+    ensure(t->data[0] == 1 && t->data[3] == 4);
 
     stack_restore();
 }
 
-static void test_operations(void)
+static void test_unary(void)
 {
     stack_save();
 
-    Tensor *x = tensor_linspace(0, 10, 10);
-    tensor_print(x);
+    // tensor_neg
+    Tensor *t = tensor_from((int[]){3}, 1, (float[]){-1, 0, 2});
+    Tensor *out = tensor_neg(t);
+    ensure(out->data[0] == 1 && out->data[1] == 0 && out->data[2] == -2);
+
+    // tensor_abs
+    t = tensor_from((int[]){3}, 1, (float[]){-2, 0, 3});
+    out = tensor_abs(t);
+    ensure(out->data[0] == 2 && out->data[1] == 0 && out->data[2] == 3);
+
+    // tensor_sign
+    t = tensor_from((int[]){3}, 1, (float[]){-5, 0, 3});
+    out = tensor_sign(t);
+    ensure(out->data[0] == -1 && out->data[1] == 0 && out->data[2] == 1);
+
+    // tensor_square
+    t = tensor_from((int[]){3}, 1, (float[]){-2, 3, 4});
+    out = tensor_square(t);
+    ensure(out->data[0] == 4 && out->data[1] == 9 && out->data[2] == 16);
+
+    // tensor_sqrt
+    t = tensor_from((int[]){3}, 1, (float[]){0, 1, 4});
+    out = tensor_sqrt(t);
+    ensure(out->data[0] == 0 && out->data[1] == 1 && isclose(out->data[2], 2));
+
+    // tensor_rsqrt
+    t = tensor_from((int[]){2}, 1, (float[]){1, 4});
+    out = tensor_rsqrt(t);
+    ensure(isclose(out->data[0], 1) && isclose(out->data[1], 0.5F));
+
+    // tensor_exp: exp(0)=1, exp(1)~=e
+    static const float e = 2.7182818284590452354F;
+    t = tensor_from((int[]){2}, 1, (float[]){0, 1});
+    out = tensor_exp(t);
+    ensure(out->data[0] == expf(0) && isclose(out->data[1], e));
+
+    // tensor_log: log(1)=0, log(e)~=1
+    t = tensor_from((int[]){2}, 1, (float[]){1, e});
+    out = tensor_log(t);
+    ensure(out->data[0] == logf(1) && isclose(out->data[1], 1));
+
+    // tensor_relu
+    t = tensor_from((int[]){3}, 1, (float[]){-1, 0, 2});
+    out = tensor_relu(t);
+    ensure(out->data[0] == 0 && out->data[1] == 0 && out->data[2] == 2);
+
+    // tensor_sigmoid: sigmoid(0)=0.5, sigmoid(large)~=1
+    t = tensor_from((int[]){2}, 1, (float[]){0, 1e6F});
+    out = tensor_sigmoid(t);
+    ensure(isclose(out->data[0], 0.5F) && isclose(out->data[1], 1));
+
+    // tensor_tanh: tanh(0)=0, tanh(large)~=1
+    t = tensor_from((int[]){2}, 1, (float[]){0, 1e6F});
+    out = tensor_tanh(t);
+    ensure(isclose(out->data[0], 0) && isclose(out->data[1], 1));
+
+    // tensor_logical_not: 0->1, nonzero->0
+    t = tensor_from((int[]){3}, 1, (float[]){0, 1, -5});
+    out = tensor_logical_not(t);
+    ensure(out->data[0] == 1 && out->data[1] == 0 && out->data[2] == 0);
+
+    // non-contiguous input (transposed)
+    t = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
+    t = tensor_transpose(t, 0, 1);
+    out = tensor_neg(t);
+    ensure(out->data[0] == -1 && out->data[1] == -3 && out->data[2] == -2 && out->data[3] == -4);
 
     stack_restore();
 }
 
-int main(void)
+static void test_binary(void)
 {
-    test_movement();
-    test_operations();
-    stack_clear();
+    stack_save();
+
+    Tensor *a = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
+    Tensor *b = tensor_from((int[]){3}, 1, (float[]){4, 5, 6});
+
+    // tensor_add
+    Tensor *out = tensor_add(a, b);
+    ensure(out->data[0] == 5 && out->data[1] == 7 && out->data[2] == 9);
+
+    // tensor_sub
+    out = tensor_sub(b, a);
+    ensure(out->data[0] == 3 && out->data[1] == 3 && out->data[2] == 3);
+
+    // tensor_mul
+    out = tensor_mul(a, b);
+    ensure(out->data[0] == 4 && out->data[1] == 10 && out->data[2] == 18);
+
+    // tensor_div
+    out = tensor_div(b, a);
+    ensure(isclose(out->data[0], 4) && isclose(out->data[1], 2.5F) && isclose(out->data[2], 2));
+
+    // tensor_mod: Python convention - sign follows divisor
+    a = tensor_from((int[]){4}, 1, (float[]){7, -7, 7, -7});
+    b = tensor_from((int[]){4}, 1, (float[]){3, 3, -3, -3});
+    out = tensor_mod(a, b);
+    ensure(isclose(out->data[0], 1) && isclose(out->data[1], 2));    // 7%3=1, -7%3=2
+    ensure(isclose(out->data[2], -2) && isclose(out->data[3], -1));  // 7%-3=-2, -7%-3=-1
+
+    // tensor_pow
+    a = tensor_from((int[]){3}, 1, (float[]){2, 3, 4});
+    b = tensor_from((int[]){3}, 1, (float[]){2, 2, 2});
+    out = tensor_pow(a, b);
+    ensure(out->data[0] == 4 && out->data[1] == 9 && out->data[2] == 16);
+
+    // tensor_eq / tensor_ne
+    a = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
+    b = tensor_from((int[]){3}, 1, (float[]){1, 0, 3});
+    out = tensor_eq(a, b);
+    ensure(out->data[0] == 1 && out->data[1] == 0 && out->data[2] == 1);
+    out = tensor_ne(a, b);
+    ensure(out->data[0] == 0 && out->data[1] == 1 && out->data[2] == 0);
+
+    // tensor_lt / tensor_le / tensor_gt / tensor_ge
+    out = tensor_lt(a, b);
+    ensure(out->data[0] == 0 && out->data[1] == 0 && out->data[2] == 0);
+    out = tensor_le(a, b);
+    ensure(out->data[0] == 1 && out->data[1] == 0 && out->data[2] == 1);
+    out = tensor_gt(a, b);
+    ensure(out->data[0] == 0 && out->data[1] == 1 && out->data[2] == 0);
+    out = tensor_ge(a, b);
+    ensure(out->data[0] == 1 && out->data[1] == 1 && out->data[2] == 1);
+
+    // tensor_logical_and / tensor_logical_or / tensor_logical_xor
+    a = tensor_from((int[]){3}, 1, (float[]){1, 0, 1});
+    b = tensor_from((int[]){3}, 1, (float[]){1, 1, 0});
+    out = tensor_logical_and(a, b);
+    ensure(out->data[0] == 1 && out->data[1] == 0 && out->data[2] == 0);
+    out = tensor_logical_or(a, b);
+    ensure(out->data[0] == 1 && out->data[1] == 1 && out->data[2] == 1);
+    out = tensor_logical_xor(a, b);
+    ensure(out->data[0] == 0 && out->data[1] == 1 && out->data[2] == 1);
+
+    // tensor_minimum / tensor_maximum
+    a = tensor_from((int[]){3}, 1, (float[]){1, 5, 3});
+    b = tensor_from((int[]){3}, 1, (float[]){4, 2, 3});
+    out = tensor_minimum(a, b);
+    ensure(out->data[0] == 1 && out->data[1] == 2 && out->data[2] == 3);
+    out = tensor_maximum(a, b);
+    ensure(out->data[0] == 4 && out->data[1] == 5 && out->data[2] == 3);
+
+    // broadcasting: [3] + [1] -> [3]
+    a = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
+    b = tensor_from((int[]){1}, 1, (float[]){10});
+    out = tensor_add(a, b);
+    ensure(out->data[0] == 11 && out->data[1] == 12 && out->data[2] == 13);
+
+    // broadcasting: [2, 3] + [3] -> [2, 3]
+    a = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    b = tensor_from((int[]){3}, 1, (float[]){10, 20, 30});
+    out = tensor_add(a, b);
+    ensure(out->data[0] == 11 && out->data[3] == 14 && out->data[5] == 36);
+
+    stack_restore();
 }
 
 // NOLINTEND(readability-identifier-length)
+
+int main(void)
+{
+    test_creation();
+    test_movement();
+    test_unary();
+    test_binary();
+    stack_clear();
+}
