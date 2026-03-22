@@ -36,6 +36,26 @@ Tensor *tensor_expand(const Tensor *src, const int *shape, int ndim);
 Tensor *tensor_cat(const Tensor **src, int num, int dim);
 Tensor *tensor_stack(const Tensor **src, int num, int dim);
 
+// binary
+
+Tensor *tensor_add(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_sub(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_mul(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_div(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_mod(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_pow(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_eq(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_ne(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_lt(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_le(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_gt(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_ge(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_logical_and(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_logical_or(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_logical_xor(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_minimum(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs);
+
 // i/o
 
 void tensor_print(const Tensor *self);
@@ -716,6 +736,281 @@ Tensor *tensor_stack(const Tensor **src, int num, int dim)
     return tensor_cat(tmp, num, dim);
 }
 
+// binary
+
+typedef void Binary(float *, const float *, long, const float *, long, int);
+
+static void binary_add(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                       int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = lhs[i * str_lhs] + rhs[i * str_rhs];
+    }
+}
+
+static void binary_sub(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                       int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = lhs[i * str_lhs] - rhs[i * str_rhs];
+    }
+}
+
+static void binary_mul(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                       int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = lhs[i * str_lhs] * rhs[i * str_rhs];
+    }
+}
+
+static void binary_div(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                       int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = lhs[i * str_lhs] / rhs[i * str_rhs];
+    }
+}
+
+static void binary_mod(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                       int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = fmodf(lhs[i * str_lhs], rhs[i * str_rhs]);
+        if (out[i] != 0 && (out[i] < 0) != (rhs[i * str_rhs] < 0)) {
+            out[i] += rhs[i * str_rhs];
+        }
+    }
+}
+
+static void binary_pow(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                       int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = powf(lhs[i * str_lhs], rhs[i * str_rhs]);
+    }
+}
+
+static void binary_eq(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                      int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (lhs[i * str_lhs] == rhs[i * str_rhs]) ? 1 : 0;
+    }
+}
+
+static void binary_ne(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                      int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (lhs[i * str_lhs] != rhs[i * str_rhs]) ? 1 : 0;
+    }
+}
+
+static void binary_lt(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                      int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (lhs[i * str_lhs] < rhs[i * str_rhs]) ? 1 : 0;
+    }
+}
+
+static void binary_le(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                      int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (lhs[i * str_lhs] <= rhs[i * str_rhs]) ? 1 : 0;
+    }
+}
+
+static void binary_gt(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                      int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (lhs[i * str_lhs] > rhs[i * str_rhs]) ? 1 : 0;
+    }
+}
+
+static void binary_ge(float *out, const float *lhs, long str_lhs, const float *rhs, long str_rhs,
+                      int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (lhs[i * str_lhs] >= rhs[i * str_rhs]) ? 1 : 0;
+    }
+}
+
+static void binary_logical_and(float *out, const float *lhs, long str_lhs, const float *rhs,
+                               long str_rhs, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (lhs[i * str_lhs] != 0 && rhs[i * str_rhs] != 0) ? 1 : 0;
+    }
+}
+
+static void binary_logical_or(float *out, const float *lhs, long str_lhs, const float *rhs,
+                              long str_rhs, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = (lhs[i * str_lhs] != 0 || rhs[i * str_rhs] != 0) ? 1 : 0;
+    }
+}
+
+static void binary_logical_xor(float *out, const float *lhs, long str_lhs, const float *rhs,
+                               long str_rhs, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = ((lhs[i * str_lhs] != 0) != (rhs[i * str_rhs] != 0)) ? 1 : 0;
+    }
+}
+
+static void binary_minimum(float *out, const float *lhs, long str_lhs, const float *rhs,
+                           long str_rhs, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = fminf(lhs[i * str_lhs], rhs[i * str_rhs]);
+    }
+}
+
+static void binary_maximum(float *out, const float *lhs, long str_lhs, const float *rhs,
+                           long str_rhs, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = fmaxf(lhs[i * str_lhs], rhs[i * str_rhs]);
+    }
+}
+
+static int broadcast_shape(int *shape, const Tensor *lhs, const Tensor *rhs)
+{
+    int ndim = (lhs->ndim > rhs->ndim) ? lhs->ndim : rhs->ndim;
+    int off_lhs = ndim - lhs->ndim;
+    int off_rhs = ndim - rhs->ndim;
+    for (int i = 0; i < ndim; i++) {
+        int dim_lhs = (i >= off_lhs) ? lhs->shape[i - off_lhs] : 1;
+        int dim_rhs = (i >= off_rhs) ? rhs->shape[i - off_rhs] : 1;
+        assert(dim_lhs == dim_rhs || dim_lhs == 1 || dim_rhs == 1);
+        shape[i] = (dim_lhs > dim_rhs) ? dim_lhs : dim_rhs;
+    }
+    return ndim;
+}
+
+static void apply_binary(Tensor *out, long off_out, const Tensor *lhs, long off_lhs,
+                         const Tensor *rhs, long off_rhs, int dim, Binary *func)
+{
+    if (dim == out->ndim - 1) {
+        func(out->data + off_out, lhs->data + off_lhs, lhs->stride[dim], rhs->data + off_rhs,
+             rhs->stride[dim], out->shape[dim]);
+    }
+    else {
+        for (int i = 0; i < out->shape[dim]; i++) {
+            apply_binary(out, off_out + (i * out->stride[dim]), lhs,
+                         off_lhs + (i * lhs->stride[dim]), rhs, off_rhs + (i * rhs->stride[dim]),
+                         dim + 1, func);
+        }
+    }
+}
+
+static Tensor *binary(const Tensor *lhs_, const Tensor *rhs_, Binary *func)
+{
+    assert(lhs_ && rhs_ && func);
+    int shape[MAX_NDIM];
+    int ndim = broadcast_shape(shape, lhs_, rhs_);
+    Tensor *lhs = tensor_expand(lhs_, shape, ndim);
+    Tensor *rhs = tensor_expand(rhs_, shape, ndim);
+    Tensor *out = tensor_empty(shape, ndim);
+    if (ndim == 0) {
+        func(out->data, lhs->data, 0, rhs->data, 0, 1);
+    }
+    else {
+        apply_binary(out, 0, lhs, 0, rhs, 0, 0, func);
+    }
+    return out;
+}
+
+Tensor *tensor_add(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_add);
+}
+
+Tensor *tensor_sub(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_sub);
+}
+
+Tensor *tensor_mul(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_mul);
+}
+
+Tensor *tensor_div(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_div);
+}
+
+Tensor *tensor_mod(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_mod);
+}
+
+Tensor *tensor_pow(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_pow);
+}
+
+Tensor *tensor_eq(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_eq);
+}
+
+Tensor *tensor_ne(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_ne);
+}
+
+Tensor *tensor_lt(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_lt);
+}
+
+Tensor *tensor_le(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_le);
+}
+
+Tensor *tensor_gt(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_gt);
+}
+
+Tensor *tensor_ge(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_ge);
+}
+
+Tensor *tensor_logical_and(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_logical_and);
+}
+
+Tensor *tensor_logical_or(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_logical_or);
+}
+
+Tensor *tensor_logical_xor(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_logical_xor);
+}
+
+Tensor *tensor_minimum(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_minimum);
+}
+
+Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs)
+{
+    return binary(lhs, rhs, binary_maximum);
+}
+
 // i/o
 
 static void print_data(const Tensor *self, long off, int dim)
@@ -810,11 +1105,12 @@ static void test_movement(void)
     stack_restore();
 }
 
-    ten = tensor_select(ten, 0, 0);
-    tensor_print(ten);
+static void test_operations(void)
+{
+    stack_save();
 
-    ten = tensor_expand(ten, (int[]){2, -1, -1}, 3);
-    tensor_print(ten);
+    Tensor *x = tensor_linspace(0, 10, 10);
+    tensor_print(x);
 
     stack_restore();
 }
@@ -822,6 +1118,7 @@ static void test_movement(void)
 int main(void)
 {
     test_movement();
+    test_operations();
 }
 
 // NOLINTEND(readability-identifier-length)
