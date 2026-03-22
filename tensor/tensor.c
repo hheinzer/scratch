@@ -70,6 +70,14 @@ Tensor *tensor_logical_xor(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_minimum(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs);
 
+// reduction
+
+Tensor *tensor_min(const Tensor *src, int axis, int keepdim);
+Tensor *tensor_max(const Tensor *src, int axis, int keepdim);
+Tensor *tensor_sum(const Tensor *src, int axis, int keepdim);
+Tensor *tensor_prod(const Tensor *src, int axis, int keepdim);
+Tensor *tensor_mean(const Tensor *src, int axis, int keepdim);
+
 // i/o
 
 void tensor_print(const Tensor *self);
@@ -1199,6 +1207,146 @@ Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs)
     return binary(lhs, rhs, binary_maximum);
 }
 
+// reduction
+
+typedef void Reduce(float *, const float *, long, long);
+
+static void reduce_min(float *out, const float *src, long str_src, long num)
+{
+    float acc = src[0];
+    for (long i = 1; i < num; i++) {
+        float val = src[i * str_src];
+        if (val < acc) {
+            acc = val;
+        }
+    }
+    *out = acc;
+}
+
+static void reduce_max(float *out, const float *src, long str_src, long num)
+{
+    float acc = src[0];
+    for (long i = 1; i < num; i++) {
+        float val = src[i * str_src];
+        if (val > acc) {
+            acc = val;
+        }
+    }
+    *out = acc;
+}
+
+static void reduce_sum(float *out, const float *src, long str_src, long num)
+{
+    float acc = 0;
+    for (long i = 0; i < num; i++) {
+        acc += src[i * str_src];
+    }
+    *out = acc;
+}
+
+static void reduce_prod(float *out, const float *src, long str_src, long num)
+{
+    float acc = 1;
+    for (long i = 0; i < num; i++) {
+        acc *= src[i * str_src];
+    }
+    *out = acc;
+}
+
+static void apply_reduce(Tensor *out, long off_out, const Tensor *src, long off_src, int dim,
+                         Reduce *func, int axis)
+{
+    if (dim == src->ndim) {
+        func(out->data + off_out, src->data + off_src, src->stride[axis], src->shape[axis]);
+        return;
+    }
+    if (dim == axis) {
+        apply_reduce(out, off_out, src, off_src, dim + 1, func, axis);
+    }
+    else {
+        int dim_out;
+        if (out->ndim == src->ndim || dim < axis) {
+            dim_out = dim;
+        }
+        else {
+            dim_out = dim - 1;
+        }
+        for (int i = 0; i < src->shape[dim]; i++) {
+            apply_reduce(out, off_out + (i * out->stride[dim_out]), src,
+                         off_src + (i * src->stride[dim]), dim + 1, func, axis);
+        }
+    }
+}
+
+static Tensor *reduce(const Tensor *src, int axis, int keepdim, Reduce *func)
+{
+    assert(src && func);
+    if (axis == INT_MAX) {
+        int shape[MAX_NDIM];
+        for (int i = 0; i < src->ndim; i++) {
+            shape[i] = 1;
+        }
+        int ndim = keepdim ? src->ndim : 0;
+        Tensor *out = tensor_empty(shape, ndim);
+        if (is_contiguous(src)) {
+            func(out->data, src->data, 1, src->numel);
+        }
+        else {
+            stack_save();
+            Tensor *contiguous = tensor_contiguous(src);
+            func(out->data, contiguous->data, 1, contiguous->numel);
+            stack_restore();
+        }
+        return out;
+    }
+    axis = normalize_dim(axis, src->ndim);
+    int shape[MAX_NDIM];
+    int ndim = 0;
+    for (int i = 0; i < src->ndim; i++) {
+        if (i == axis) {
+            if (keepdim) {
+                shape[ndim++] = 1;
+            }
+        }
+        else {
+            shape[ndim++] = src->shape[i];
+        }
+    }
+    Tensor *out = tensor_empty(shape, ndim);
+    apply_reduce(out, 0, src, 0, 0, func, axis);
+    return out;
+}
+
+Tensor *tensor_min(const Tensor *src, int axis, int keepdim)
+{
+    return reduce(src, axis, keepdim, reduce_min);
+}
+
+Tensor *tensor_max(const Tensor *src, int axis, int keepdim)
+{
+    return reduce(src, axis, keepdim, reduce_max);
+}
+
+Tensor *tensor_sum(const Tensor *src, int axis, int keepdim)
+{
+    return reduce(src, axis, keepdim, reduce_sum);
+}
+
+Tensor *tensor_prod(const Tensor *src, int axis, int keepdim)
+{
+    return reduce(src, axis, keepdim, reduce_prod);
+}
+
+Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
+{
+    Tensor *out = tensor_sum(src, axis, keepdim);
+    long count = (axis == INT_MAX) ? src->numel : src->shape[normalize_dim(axis, src->ndim)];
+    for (long i = 0; i < out->numel; i++) {
+        out->data[i] /= (float)count;
+    }
+    return out;
+}
+
 // i/o
 
 static void print_data(const Tensor *self, long off, int dim)
@@ -1636,7 +1784,58 @@ static void test_binary(void)
     stack_restore();
 }
 
-// NOLINTEND(readability-identifier-length)
+static void test_reduction(void)
+{
+    stack_save();
+
+    // tensor_min / tensor_max along axis
+    Tensor *src = tensor_from((int[]){2, 3}, 2, (float[]){3, 1, 4, 1, 5, 9});
+    Tensor *out = tensor_min(src, 1, 0);
+    ensure(out->ndim == 1 && out->shape[0] == 2);
+    ensure(out->data[0] == 1 && out->data[1] == 1);
+    out = tensor_max(src, 1, 0);
+    ensure(out->data[0] == 4 && out->data[1] == 9);
+
+    // keepdim
+    out = tensor_min(src, 0, 1);
+    ensure(out->ndim == 2 && out->shape[0] == 1 && out->shape[1] == 3);
+    ensure(out->data[0] == 1 && out->data[1] == 1 && out->data[2] == 4);
+
+    // tensor_sum / tensor_prod along axis
+    src = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    out = tensor_sum(src, 0, 0);
+    ensure(out->data[0] == 5 && out->data[1] == 7 && out->data[2] == 9);
+    out = tensor_prod(src, 1, 0);
+    ensure(out->data[0] == 6 && out->data[1] == 120);
+
+    // tensor_mean along axis
+    out = tensor_mean(src, 0, 0);
+    ensure(isclose(out->data[0], 2.5F) && isclose(out->data[1], 3.5F) &&
+           isclose(out->data[2], 4.5F));
+
+    // full reduction (axis == INT_MAX)
+    out = tensor_sum(src, INT_MAX, 0);
+    ensure(out->ndim == 0 && isclose(out->data[0], 21.F));
+    out = tensor_min(src, INT_MAX, 0);
+    ensure(out->data[0] == 1);
+    out = tensor_max(src, INT_MAX, 0);
+    ensure(out->data[0] == 6);
+    out = tensor_mean(src, INT_MAX, 0);
+    ensure(isclose(out->data[0], 3.5F));
+
+    // full reduction keepdim
+    out = tensor_sum(src, INT_MAX, 1);
+    ensure(out->ndim == 2 && out->shape[0] == 1 && out->shape[1] == 1);
+    ensure(isclose(out->data[0], 21.F));
+
+    // non-contiguous input (transposed): [[1,2,3],[4,5,6]]^T = [[1,4],[2,5],[3,6]]
+    src = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    src = tensor_transpose(src, 0, 1);  // [3, 2]
+    out = tensor_sum(src, 0, 0);        // sum along dim 0 -> [6, 15]
+    ensure(out->data[0] == 1 + 2 + 3 && out->data[1] == 4 + 5 + 6);
+
+    stack_restore();
+}
 
 int main(void)
 {
@@ -1644,5 +1843,6 @@ int main(void)
     test_movement();
     test_unary();
     test_binary();
+    test_reduction();
     stack_clear();
 }
