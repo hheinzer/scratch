@@ -102,7 +102,7 @@ static void *stack_memdup(const void *ptr, size_t num, size_t size)
     return (dup && ptr) ? memcpy(dup, ptr, num * size) : 0;
 }
 
-static int g_idx_save = 0;
+static int g_index = 0;
 static Stack *g_save[MAX_SAVE];
 
 static void *stack_pop(void)
@@ -120,19 +120,19 @@ static void stack_clear(void)
     while (g_head) {
         free(stack_pop());
     }
-    g_idx_save = 0;
+    g_index = 0;
 }
 
 static void stack_save(void)
 {
-    assert(g_idx_save < MAX_SAVE);
-    g_save[g_idx_save++] = g_head;
+    assert(g_index < MAX_SAVE);
+    g_save[g_index++] = g_head;
 }
 
 static void stack_restore(void)
 {
-    assert(g_idx_save - 1 >= 0);
-    Stack *save = g_save[--g_idx_save];
+    assert(g_index - 1 >= 0);
+    Stack *save = g_save[--g_index];
     while (g_head != save) {
         free(stack_pop());
     }
@@ -310,7 +310,7 @@ Tensor *tensor_rand(const int *shape, int ndim)
 
 static void random_normal(float *rn0, float *rn1)
 {
-    static const float two_pi = 2 * 3.14159265358979323846F;
+    float two_pi = 2 * 3.14159265358979323846F;
     float ru1;
     do {
         ru1 = random_uniform();
@@ -372,23 +372,22 @@ static int is_contiguous(const Tensor *src)
     return 1;
 }
 
-static void pack_data(const Tensor *src, Tensor *out, int dim, long off_src, long *offset)
+static void pack_data(Tensor *out, long *off_out, const Tensor *src, long off_src, int dim)
 {
     if (dim == src->ndim - 1) {
-        long off_out = *offset;
         if (src->stride[dim] == 1) {
-            memcpy(out->data + off_out, src->data + off_src, src->shape[dim] * sizeof(*src->data));
+            memcpy(out->data + *off_out, src->data + off_src, src->shape[dim] * sizeof(*src->data));
         }
         else {
             for (int i = 0; i < src->shape[dim]; i++) {
-                out->data[off_out + i] = src->data[off_src + (i * src->stride[dim])];
+                out->data[*off_out + i] = src->data[off_src + (i * src->stride[dim])];
             }
         }
-        *offset += src->shape[dim];
+        *off_out += src->shape[dim];
     }
     else {
         for (int i = 0; i < src->shape[dim]; i++) {
-            pack_data(src, out, dim + 1, off_src + (i * src->stride[dim]), offset);
+            pack_data(out, off_out, src, off_src + (i * src->stride[dim]), dim + 1);
         }
     }
 }
@@ -411,8 +410,8 @@ Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim)
     }
     else {
         out->data = stack_malloc(out->numel, sizeof(*out->data));
-        long offset = 0;
-        pack_data(src, out, 0, 0, &offset);
+        long off_out = 0;
+        pack_data(out, &off_out, src, 0, 0);
     }
     return out;
 }
@@ -666,23 +665,23 @@ static int valid_cat(const Tensor **src, int num, int dim)
     return 1;
 }
 
-static void cat_data(const Tensor *src, Tensor *dst, int dim, long off_src, long off_dst)
+static void cat_data(Tensor *out, long off_out, const Tensor *src, long off_src, int dim)
 {
     if (dim == src->ndim - 1) {
-        if (src->stride[dim] == 1 && dst->stride[dim] == 1) {
-            memcpy(dst->data + off_dst, src->data + off_src, src->shape[dim] * sizeof(*src->data));
+        if (src->stride[dim] == 1 && out->stride[dim] == 1) {
+            memcpy(out->data + off_out, src->data + off_src, src->shape[dim] * sizeof(*src->data));
         }
         else {
             for (int i = 0; i < src->shape[dim]; i++) {
-                dst->data[off_dst + (i * dst->stride[dim])] =
+                out->data[off_out + (i * out->stride[dim])] =
                     src->data[off_src + (i * src->stride[dim])];
             }
         }
     }
     else {
         for (int i = 0; i < src->shape[dim]; i++) {
-            cat_data(src, dst, dim + 1, off_src + (i * src->stride[dim]),
-                     off_dst + (i * dst->stride[dim]));
+            cat_data(out, off_out + (i * out->stride[dim]), src, off_src + (i * src->stride[dim]),
+                     dim + 1);
         }
     }
 }
@@ -699,10 +698,10 @@ Tensor *tensor_cat(const Tensor **src, int num, int dim)
         shape[dim] += src[i]->shape[dim];
     }
     Tensor *out = tensor_empty(shape, ndim);
-    long offset = 0;
+    long off_out = 0;
     for (int i = 0; i < num; i++) {
-        cat_data(src[i], out, 0, 0, offset * out->stride[dim]);
-        offset += src[i]->shape[dim];
+        cat_data(out, off_out * out->stride[dim], src[i], 0, 0);
+        off_out += src[i]->shape[dim];
     }
     return out;
 }
@@ -719,7 +718,7 @@ Tensor *tensor_stack(const Tensor **src, int num, int dim)
 
 // i/o
 
-static void print_data(const Tensor *self, int dim, long off)
+static void print_data(const Tensor *self, long off, int dim)
 {
     printf("[");
     if (dim == self->ndim - 1) {
@@ -740,7 +739,7 @@ static void print_data(const Tensor *self, int dim, long off)
                     printf(" ");
                 }
             }
-            print_data(self, dim + 1, off + (i * self->stride[dim]));
+            print_data(self, off + (i * self->stride[dim]), dim + 1);
         }
     }
     printf("]");
@@ -769,36 +768,47 @@ void tensor_print(const Tensor *self)
 
 // test
 
+// NOLINTBEGIN(readability-identifier-length)
+
 static void test_movement(void)
 {
     stack_save();
 
-    Tensor *ten = tensor_range(1, 16, 1);
-    tensor_print(ten);
+    Tensor *t = tensor_range(1, 16, 1);
+    tensor_print(t);
 
-    ten = tensor_reshape(ten, (int[]){4, 4}, 2);
-    tensor_print(ten);
+    t = tensor_reshape(t, (int[]){4, 4}, 2);
+    tensor_print(t);
 
-    ten = tensor_unsqueeze(ten, -2);
-    tensor_print(ten);
+    t = tensor_unsqueeze(t, -2);
+    tensor_print(t);
 
-    ten = tensor_squeeze_all(ten);
-    tensor_print(ten);
+    t = tensor_squeeze_all(t);
+    tensor_print(t);
 
-    ten = tensor_transpose(ten, 0, -1);
-    tensor_print(ten);
+    t = tensor_transpose(t, 0, -1);
+    tensor_print(t);
 
-    ten = tensor_slice(ten, 0, INT_MIN, INT_MAX, -1);
-    tensor_print(ten);
+    t = tensor_slice(t, 0, INT_MIN, INT_MAX, -1);
+    tensor_print(t);
 
-    ten = tensor_stack((const Tensor *[]){ten, ten}, 2, 0);
-    tensor_print(ten);
+    t = tensor_stack((const Tensor *[]){t, t}, 2, 0);
+    tensor_print(t);
 
-    ten = tensor_flatten_all(ten);
-    tensor_print(ten);
+    t = tensor_flatten_all(t);
+    tensor_print(t);
 
-    ten = tensor_reshape(ten, (int[]){-1, 4, 4}, 3);
-    tensor_print(ten);
+    t = tensor_reshape(t, (int[]){-1, 4, 4}, 3);
+    tensor_print(t);
+
+    t = tensor_select(t, 0, 0);
+    tensor_print(t);
+
+    t = tensor_expand(t, (int[]){2, -1, -1}, 3);
+    tensor_print(t);
+
+    stack_restore();
+}
 
     ten = tensor_select(ten, 0, 0);
     tensor_print(ten);
@@ -813,3 +823,5 @@ int main(void)
 {
     test_movement();
 }
+
+// NOLINTEND(readability-identifier-length)
