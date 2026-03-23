@@ -52,6 +52,12 @@ static void test_creation(void)
     data[0] = 99;
     ensure(tensor_data(tensor)[0] == 1);  // copy, not a reference
 
+    // tensor_range: [1, 3] -> [1, 2, 3]
+    tensor = tensor_range(1, 3, 1);
+    ensure(tensor_numel(tensor) == 3);
+    ensure(tensor_data(tensor)[0] == 1 && tensor_data(tensor)[1] == 2 &&
+           tensor_data(tensor)[2] == 3);
+
     // tensor_arange: [1, 4) -> [1, 2, 3]
     tensor = tensor_arange(1, 4, 1);
     ensure(tensor_numel(tensor) == 3);
@@ -63,12 +69,6 @@ static void test_creation(void)
     ensure(tensor_numel(tensor) == 3);
     ensure(tensor_data(tensor)[0] == 3 && tensor_data(tensor)[1] == 2 &&
            tensor_data(tensor)[2] == 1);
-
-    // tensor_range: [1, 3] -> [1, 2, 3]
-    tensor = tensor_range(1, 3, 1);
-    ensure(tensor_numel(tensor) == 3);
-    ensure(tensor_data(tensor)[0] == 1 && tensor_data(tensor)[1] == 2 &&
-           tensor_data(tensor)[2] == 3);
 
     // tensor_linspace: 0 to 1, 3 steps -> [0, 0.5, 1]
     tensor = tensor_linspace(0, 1, 3);

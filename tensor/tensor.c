@@ -204,12 +204,12 @@ Tensor *tensor_fill(const int *shape, int ndim, float value)
     return out;
 }
 
-Tensor *tensor_arange(float start, float stop, float step)
+Tensor *tensor_range(float start, float stop, float step)
 {
     assert(step != 0);
-    int numel = (int)ceilf((stop - start) / step);
+    int numel = (int)ceilf((stop - start) / step) + 1;
     float last = start + ((float)(numel - 1) * step);
-    if (numel > 0 && ((step > 0 && last >= stop) || (step < 0 && last <= stop))) {
+    if (numel > 1 && ((step > 0 && last > stop) || (step < 0 && last < stop))) {
         numel -= 1;
     }
     assert(numel > 0);
@@ -220,12 +220,12 @@ Tensor *tensor_arange(float start, float stop, float step)
     return out;
 }
 
-Tensor *tensor_range(float start, float stop, float step)
+Tensor *tensor_arange(float start, float stop, float step)
 {
     assert(step != 0);
-    int numel = (int)ceilf((stop - start) / step) + 1;
+    int numel = (int)ceilf((stop - start) / step);
     float last = start + ((float)(numel - 1) * step);
-    if (numel > 1 && ((step > 0 && last > stop) || (step < 0 && last < stop))) {
+    if (numel > 0 && ((step > 0 && last >= stop) || (step < 0 && last <= stop))) {
         numel -= 1;
     }
     assert(numel > 0);
