@@ -56,6 +56,9 @@ Tensor *tensor_square(const Tensor *src);
 Tensor *tensor_sqrt(const Tensor *src);
 Tensor *tensor_rsqrt(const Tensor *src);
 Tensor *tensor_exp(const Tensor *src);
+Tensor *tensor_sin(const Tensor *src);
+Tensor *tensor_cos(const Tensor *src);
+Tensor *tensor_tan(const Tensor *src);
 Tensor *tensor_log(const Tensor *src);
 Tensor *tensor_floor(const Tensor *src);
 Tensor *tensor_ceil(const Tensor *src);
@@ -108,7 +111,7 @@ void tensor_argmax(const Tensor *src, long *index, int axis);
 
 Tensor *tensor_softmax(const Tensor *src, int axis);
 Tensor *tensor_log_softmax(const Tensor *src, int axis);
-Tensor *tensor_cross_entropy(const Tensor *logits, const Tensor *target);
+Tensor *tensor_cross_entropy(const Tensor *input, const Tensor *target);
 Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);
 

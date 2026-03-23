@@ -772,6 +772,27 @@ static void unary_exp(float *out, const float *src, long stride_src, int num)
     }
 }
 
+static void unary_sin(float *out, const float *src, long stride_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = sinf(src[i * stride_src]);
+    }
+}
+
+static void unary_cos(float *out, const float *src, long stride_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = cosf(src[i * stride_src]);
+    }
+}
+
+static void unary_tan(float *out, const float *src, long stride_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = tanf(src[i * stride_src]);
+    }
+}
+
 static void unary_log(float *out, const float *src, long stride_src, int num)
 {
     for (int i = 0; i < num; i++) {
@@ -889,6 +910,21 @@ Tensor *tensor_rsqrt(const Tensor *src)
 Tensor *tensor_exp(const Tensor *src)
 {
     return unary(src, unary_exp);
+}
+
+Tensor *tensor_sin(const Tensor *src)
+{
+    return unary(src, unary_sin);
+}
+
+Tensor *tensor_cos(const Tensor *src)
+{
+    return unary(src, unary_cos);
+}
+
+Tensor *tensor_tan(const Tensor *src)
+{
+    return unary(src, unary_tan);
 }
 
 Tensor *tensor_log(const Tensor *src)
@@ -1496,21 +1532,21 @@ Tensor *tensor_log_softmax(const Tensor *src, int axis)
     return tensor_sub(sub, tensor_log(tensor_sum(tensor_exp(sub), axis, 1)));
 }
 
-Tensor *tensor_cross_entropy(const Tensor *logits, const Tensor *target)
+Tensor *tensor_cross_entropy(const Tensor *input, const Tensor *target)
 {
-    assert(logits && target && logits->ndim == 2 && target->ndim == 1);
-    assert(logits->shape[0] == target->shape[0]);
-    int numel = logits->shape[0];
+    assert(input && target && input->ndim == 2 && target->ndim == 1);
+    assert(input->shape[0] == target->shape[0]);
+    int numel = input->shape[0];
     Tensor *loss = tensor_empty((int[]){numel}, 1);
     stack_save();
-    const Tensor *log_prob = tensor_log_softmax(logits, 1);
+    const Tensor *lsm = tensor_log_softmax(input, 1);
     if (!is_contiguous(target)) {
         target = tensor_contiguous(target);
     }
     for (int i = 0; i < numel; i++) {
         int class = (int)target->data[i];
-        assert(class >= 0 && class < logits->shape[1]);
-        loss->data[i] = -log_prob->data[((long)i * log_prob->stride[0]) + class];
+        assert(class >= 0 && class < input->shape[1]);
+        loss->data[i] = -lsm->data[((long)i * lsm->stride[0]) + class];
     }
     stack_restore();
     return tensor_mean(loss, INT_MAX, 0);
