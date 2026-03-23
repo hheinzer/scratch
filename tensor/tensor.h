@@ -90,6 +90,7 @@ Tensor *tensor_prod(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_mean(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_var(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_std(const Tensor *src, int axis, int keepdim);
+Tensor *tensor_norm(const Tensor *src, int axis, int keepdim);
 
 // argreduction
 

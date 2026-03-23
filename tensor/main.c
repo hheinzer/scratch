@@ -442,7 +442,7 @@ static void test_reduction(void)
 
     // full reduction (axis == INT_MAX)
     out = tensor_sum(src, INT_MAX, 0);
-    ensure(tensor_ndim(out) == 0 && isclose(tensor_data(out)[0], 21.F));
+    ensure(tensor_ndim(out) == 0 && isclose(tensor_data(out)[0], 21));
     out = tensor_min(src, INT_MAX, 0);
     ensure(tensor_data(out)[0] == 1);
     out = tensor_max(src, INT_MAX, 0);
@@ -453,7 +453,7 @@ static void test_reduction(void)
     // full reduction keepdim
     out = tensor_sum(src, INT_MAX, 1);
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 1 && tensor_shape(out)[1] == 1);
-    ensure(isclose(tensor_data(out)[0], 21.F));
+    ensure(isclose(tensor_data(out)[0], 21));
 
     // non-contiguous input (transposed): [[1,2,3],[4,5,6]]^T = [[1,4],[2,5],[3,6]]
     src = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
@@ -464,11 +464,11 @@ static void test_reduction(void)
     // tensor_var: [0, 2, 4] -> mean=2, var=8/3
     src = tensor_from((int[]){3}, 1, (float[]){0, 2, 4});
     out = tensor_var(src, 0, 0);
-    ensure(isclose(tensor_data(out)[0], 8.F / 3.F));
+    ensure(isclose(tensor_data(out)[0], 8 / 3.0F));
 
     // tensor_std: std = sqrt(var)
     out = tensor_std(src, 0, 0);
-    ensure(isclose(tensor_data(out)[0], sqrtf(8.F / 3.F)));
+    ensure(isclose(tensor_data(out)[0], sqrtf(8 / 3.0F)));
 
     // var along axis of 2D: [[1,3],[2,4]] -> row vars = [1, 1]
     src = tensor_from((int[]){2, 2}, 2, (float[]){1, 3, 2, 4});
@@ -479,6 +479,16 @@ static void test_reduction(void)
     src = tensor_from((int[]){4}, 1, (float[]){1, 2, 3, 4});
     out = tensor_var(src, INT_MAX, 0);
     ensure(isclose(tensor_data(out)[0], 1.25F));
+
+    // tensor_norm: [3, 4] -> sqrt(9 + 16) = 5
+    src = tensor_from((int[]){2}, 1, (float[]){3, 4});
+    out = tensor_norm(src, INT_MAX, 0);
+    ensure(isclose(tensor_data(out)[0], 5));
+
+    // tensor_norm along axis: [[1,0],[0,2]] -> [1, 2]
+    src = tensor_from((int[]){2, 2}, 2, (float[]){1, 0, 0, 2});
+    out = tensor_norm(src, 1, 0);
+    ensure(isclose(tensor_data(out)[0], 1) && isclose(tensor_data(out)[1], 2));
 
     tensor_frame_end();
 }

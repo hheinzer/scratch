@@ -1303,6 +1303,11 @@ Tensor *tensor_std(const Tensor *src, int axis, int keepdim)
     return tensor_sqrt(tensor_var(src, axis, keepdim));
 }
 
+Tensor *tensor_norm(const Tensor *src, int axis, int keepdim)
+{
+    return tensor_sqrt(tensor_sum(tensor_square(src), axis, keepdim));
+}
+
 // argreduction
 
 typedef void ArgReduce(long *, const float *, long, long);
