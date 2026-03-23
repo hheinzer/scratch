@@ -82,6 +82,8 @@ Tensor *tensor_max(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_sum(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_prod(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_mean(const Tensor *src, int axis, int keepdim);
+Tensor *tensor_var(const Tensor *src, int axis, int keepdim);
+Tensor *tensor_std(const Tensor *src, int axis, int keepdim);
 
 // argreduction
 
@@ -1355,6 +1357,16 @@ Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
     return out;
 }
 
+Tensor *tensor_var(const Tensor *src, int axis, int keepdim)
+{
+    return tensor_mean(tensor_square(tensor_sub(src, tensor_mean(src, axis, 1))), axis, keepdim);
+}
+
+Tensor *tensor_std(const Tensor *src, int axis, int keepdim)
+{
+    return tensor_sqrt(tensor_var(src, axis, keepdim));
+}
+
 // argreduction
 
 typedef void ArgReduce(long *, const float *, long, long);
@@ -1932,6 +1944,25 @@ static void test_reduction(void)
     src = tensor_transpose(src, 0, 1);  // [3, 2]
     out = tensor_sum(src, 0, 0);        // sum along dim 0 -> [6, 15]
     ensure(out->data[0] == 1 + 2 + 3 && out->data[1] == 4 + 5 + 6);
+
+    // tensor_var: [0, 2, 4] -> mean=2, var=8/3
+    src = tensor_from((int[]){3}, 1, (float[]){0, 2, 4});
+    out = tensor_var(src, 0, 0);
+    ensure(isclose(out->data[0], 8.F / 3.F));
+
+    // tensor_std: std = sqrt(var)
+    out = tensor_std(src, 0, 0);
+    ensure(isclose(out->data[0], sqrtf(8.F / 3.F)));
+
+    // var along axis of 2D: [[1,3],[2,4]] -> row vars = [1, 1]
+    src = tensor_from((int[]){2, 2}, 2, (float[]){1, 3, 2, 4});
+    out = tensor_var(src, 1, 0);
+    ensure(isclose(out->data[0], 1) && isclose(out->data[1], 1));
+
+    // global reduction: [1,2,3,4] -> mean=2.5, var=1.25
+    src = tensor_from((int[]){4}, 1, (float[]){1, 2, 3, 4});
+    out = tensor_var(src, INT_MAX, 0);
+    ensure(isclose(out->data[0], 1.25F));
 
     tensor_frame_end();
 }
