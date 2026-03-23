@@ -717,6 +717,20 @@ Tensor *tensor_contiguous(const Tensor *src)
     return tensor_reshape(src, src->shape, src->ndim);
 }
 
+Tensor *tensor_clone(const Tensor *src)
+{
+    assert(src);
+    Tensor *out = tensor_empty(src->shape, src->ndim);
+    if (is_contiguous(src)) {
+        memcpy(out->data, src->data, (size_t)src->numel * sizeof(*src->data));
+    }
+    else {
+        long offset = 0;
+        pack_data(out, &offset, src, 0, 0);
+    }
+    return out;
+}
+
 // unary
 
 typedef void Unary(float *, const float *, long, int);

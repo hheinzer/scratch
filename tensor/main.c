@@ -268,6 +268,14 @@ static void test_movement(void)
     ensure(tensor_data(tensor)[2] == 2 && tensor_data(tensor)[3] == 5);  // row 1: [2, 5]
     ensure(tensor_data(tensor)[4] == 3 && tensor_data(tensor)[5] == 6);  // row 2: [3, 6]
 
+    // tensor_clone: transposed [2, 3] -> independent contiguous [3, 2]
+    tensor = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    const Tensor *clone = tensor_clone(tensor_transpose(tensor, 0, 1));
+    ensure(tensor_data(clone) != tensor_data(tensor));
+    ensure(tensor_data(clone)[0] == 1 && tensor_data(clone)[1] == 4);  // row 0: [1, 4]
+    ensure(tensor_data(clone)[2] == 2 && tensor_data(clone)[3] == 5);  // row 1: [2, 5]
+    ensure(tensor_data(clone)[4] == 3 && tensor_data(clone)[5] == 6);  // row 2: [3, 6]
+
     tensor_frame_end();
 }
 

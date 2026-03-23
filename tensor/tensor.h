@@ -48,6 +48,7 @@ Tensor *tensor_expand(const Tensor *src, const int *shape, int ndim);  // `-1` p
 Tensor *tensor_cat(const Tensor **src, int num, int dim);
 Tensor *tensor_stack(const Tensor **src, int num, int dim);
 Tensor *tensor_contiguous(const Tensor *src);
+Tensor *tensor_clone(const Tensor *src);
 
 // unary
 
