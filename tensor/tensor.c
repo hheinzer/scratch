@@ -93,6 +93,8 @@ void tensor_argmax(const Tensor *src, long *index, int axis);
 // i/o
 
 void tensor_print(const Tensor *self);
+void tensor_save(const Tensor *self, const char *fname);
+Tensor *tensor_load(const char *fname);
 
 //
 // --- SOURCE ---
@@ -1508,6 +1510,113 @@ void tensor_print(const Tensor *self)
     printf("\n\n");
 }
 
+void tensor_save(const Tensor *self, const char *fname)
+{
+    assert(self && fname);
+
+    stack_save();
+
+    if (!is_contiguous(self)) {
+        self = tensor_contiguous(self);
+    }
+
+    // build shape string: "()" or "(n,)" or "(a, b, c)"
+    char shape[128];
+    int slen = sprintf(shape, "(");
+    for (int i = 0; i < self->ndim; i++) {
+        slen += sprintf(shape + slen, "%d", self->shape[i]);
+        if (i < self->ndim - 1) {
+            slen += sprintf(shape + slen, ", ");
+        }
+    }
+    if (self->ndim <= 1) {
+        slen += sprintf(shape + slen, ",");
+    }
+    slen += sprintf(shape + slen, ")");
+
+    // build header dict
+    char header[256];
+    int hlen = sprintf(header, "{'descr': '<f4', 'fortran_order': False, 'shape': %s, }", shape);
+
+    // pad so that 10 + hlen + pad + 1 (\n) is a multiple of 64
+    int total = 10 + hlen + 1;
+    int padding = (64 - (total % 64)) % 64;
+    uint16_t header_len = (uint16_t)(hlen + padding + 1);
+
+    FILE *file = fopen(fname, "wb");
+    assert(file);
+    fwrite((uint8_t[]){0x93, 'N', 'U', 'M', 'P', 'Y', 0x01, 0x00}, 1, 8, file);  // magic + version
+    fwrite(&header_len, sizeof(header_len), 1, file);
+    fwrite(header, 1, hlen, file);
+    for (int i = 0; i < padding; i++) {
+        fputc(' ', file);
+    }
+    fputc('\n', file);
+    fwrite(self->data, sizeof(float), self->numel, file);
+    fclose(file);
+
+    stack_restore();
+}
+
+Tensor *tensor_load(const char *fname)
+{
+    assert(fname);
+
+    FILE *file = fopen(fname, "rb");
+    assert(file);
+
+    // magic + version
+    uint8_t magic[8];
+    fread(magic, 1, sizeof(magic), file);
+    assert(magic[0] == 0x93 && magic[1] == 'N' && magic[2] == 'U' && magic[3] == 'M' &&
+           magic[4] == 'P' && magic[5] == 'Y');
+
+    // header length (2 bytes for v1, 4 bytes for v2)
+    int header_len;
+    if (magic[6] == 1) {
+        uint16_t len;
+        fread(&len, sizeof(len), 1, file);
+        header_len = len;
+    }
+    else {
+        uint32_t len;
+        fread(&len, sizeof(len), 1, file);
+        assert(len <= INT_MAX);
+        header_len = (int)len;
+    }
+
+    // header dict
+    char header[1024];
+    assert(header_len < (int)sizeof(header));
+    fread(header, 1, header_len, file);
+    header[header_len] = 0;
+
+    // parse shape tuple
+    char *pos = strstr(header, "'shape'");
+    assert(pos);
+    pos = strchr(pos, '(');
+    assert(pos);
+    pos += 1;
+    int shape[MAX_NDIM];
+    int ndim = 0;
+    while (*pos != ')') {
+        while (*pos == ' ' || *pos == ',') {
+            pos++;
+        }
+        if (*pos >= '0' && *pos <= '9') {
+            long size = strtol(pos, &pos, 10);
+            assert(size <= INT_MAX);
+            shape[ndim++] = (int)size;
+        }
+    }
+
+    Tensor *out = tensor_empty(shape, ndim);
+    fread(out->data, sizeof(float), out->numel, file);
+
+    fclose(file);
+    return out;
+}
+
 // test
 
 #define ensure(cond)                                                                         \
@@ -2011,6 +2120,40 @@ static void test_argreduction(void)
     tensor_frame_end();
 }
 
+static void test_io(void)
+{
+    tensor_frame_begin();
+
+    Tensor *save = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    tensor_save(save, "/tmp/tensor.npy");
+
+    Tensor *load = tensor_load("/tmp/tensor.npy");
+    ensure(load->ndim == 2 && load->shape[0] == 2 && load->shape[1] == 3);
+    for (long i = 0; i < load->numel; i++) {
+        ensure(load->data[i] == save->data[i]);
+    }
+
+    // verify the file is readable by numpy
+    ensure(system("python3 -c \""
+                  "import numpy as np;"
+                  "a = np.load('/tmp/tensor.npy');"
+                  "assert a.shape == (2, 3);"
+                  "assert a.dtype == np.float32;"
+                  "assert (a == [[1,2,3],[4,5,6]]).all()"
+                  "\"") == 0);
+
+    // verify we can load a file saved by numpy
+    ensure(system("python3 -c \""
+                  "import numpy as np;"
+                  "np.save('/tmp/tensor.npy', np.array([[4,5,6],[7,8,9]], dtype=np.float32))"
+                  "\"") == 0);
+    load = tensor_load("/tmp/tensor.npy");
+    ensure(load->ndim == 2 && load->shape[0] == 2 && load->shape[1] == 3);
+    ensure(load->data[0] == 4 && load->data[1] == 5 && load->data[5] == 9);
+
+    tensor_frame_end();
+}
+
 int main(void)
 {
     test_creation();
@@ -2019,4 +2162,5 @@ int main(void)
     test_binary();
     test_reduction();
     test_argreduction();
+    test_io();
 }
