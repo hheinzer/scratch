@@ -90,6 +90,12 @@ Tensor *tensor_std(const Tensor *src, int axis, int keepdim);
 void tensor_argmin(const Tensor *src, long *index, int axis);
 void tensor_argmax(const Tensor *src, long *index, int axis);
 
+// processing
+
+Tensor *tensor_softmax(const Tensor *src, int axis);
+Tensor *tensor_log_softmax(const Tensor *src, int axis);
+Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);
+
 // i/o
 
 void tensor_print(const Tensor *self);
@@ -1462,6 +1468,121 @@ void tensor_argmax(const Tensor *src, long *index, int axis)
     argreduce(src, index, axis, argreduce_max);
 }
 
+// processing
+
+Tensor *tensor_softmax(const Tensor *src, int axis)
+{
+    Tensor *exp = tensor_exp(tensor_sub(src, tensor_max(src, axis, 1)));
+    return tensor_div(exp, tensor_sum(exp, axis, 1));
+}
+
+Tensor *tensor_log_softmax(const Tensor *src, int axis)
+{
+    Tensor *sub = tensor_sub(src, tensor_max(src, axis, 1));
+    return tensor_sub(sub, tensor_log(tensor_sum(tensor_exp(sub), axis, 1)));
+}
+
+static const Tensor *matmul_prepare(const Tensor *src, long *stride, int *trans)
+{
+    int ndim = src->ndim;
+    if (src->stride[ndim - 1] == 1) {
+        *stride = src->stride[ndim - 2];
+        *trans = 0;
+    }
+    else if (src->stride[ndim - 2] == 1) {
+        *stride = src->stride[ndim - 1];
+        *trans = 1;
+    }
+    else {
+        src = tensor_contiguous(src);
+        *stride = src->stride[src->ndim - 2];
+        *trans = 0;
+    }
+    return src;
+}
+
+static void matmul(float *out, long stride_out, const float *lhs, long stride_lhs, const float *rhs,
+                   long stride_rhs, int rows, int cols, int inner, int trans_lhs, int trans_rhs)
+{
+    for (int i = 0; i < rows; i++) {
+        memset(out + (i * stride_out), 0, cols * sizeof(*out));
+        for (int k = 0; k < inner; k++) {
+            float val_lhs = !trans_lhs ? lhs[(i * stride_lhs) + k] : lhs[(k * stride_lhs) + i];
+            for (int j = 0; j < cols; j++) {
+                float val_rhs = !trans_rhs ? rhs[(k * stride_rhs) + j] : rhs[(j * stride_rhs) + k];
+                out[(i * stride_out) + j] += val_lhs * val_rhs;
+            }
+        }
+    }
+}
+
+Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
+{
+    assert(lhs && rhs && lhs->ndim >= 2 && rhs->ndim >= 2);
+
+    int rows = lhs->shape[lhs->ndim - 2];
+    int cols = rhs->shape[rhs->ndim - 1];
+    int inner = lhs->shape[lhs->ndim - 1];
+    assert(inner == rhs->shape[rhs->ndim - 2]);
+
+    int ndim = (lhs->ndim > rhs->ndim) ? lhs->ndim : rhs->ndim;
+    int shape[MAX_NDIM];
+    long batches = 1;
+    for (int i = 0; i < ndim - 2; i++) {
+        int dim_lhs = i - (ndim - lhs->ndim);
+        int dim_rhs = i - (ndim - rhs->ndim);
+        int size_lhs = (dim_lhs >= 0) ? lhs->shape[dim_lhs] : 1;
+        int size_rhs = (dim_rhs >= 0) ? rhs->shape[dim_rhs] : 1;
+        assert(size_lhs == size_rhs || size_lhs == 1 || size_rhs == 1);
+        shape[i] = (size_lhs > size_rhs) ? size_lhs : size_rhs;
+        batches *= shape[i];
+    }
+    shape[ndim - 2] = rows;
+    shape[ndim - 1] = cols;
+
+    Tensor *out = tensor_empty(shape, ndim);
+    long stride_out = out->stride[out->ndim - 2];
+    long stride_batch = (out->ndim > 2) ? out->stride[out->ndim - 3] : 0;
+
+    stack_save();
+
+    int trans_lhs;
+    long stride_lhs;
+    lhs = matmul_prepare(lhs, &stride_lhs, &trans_lhs);
+
+    int trans_rhs;
+    long stride_rhs;
+    rhs = matmul_prepare(rhs, &stride_rhs, &trans_rhs);
+
+    for (long i = 0; i < batches; i++) {
+        long offset_lhs = 0;
+        long offset_rhs = 0;
+        long remaining = i;
+        for (int j = ndim - 3; j >= 0; j--) {
+            long idx_batch = remaining % shape[j];
+            int dim_lhs = j - (ndim - lhs->ndim);
+            if (dim_lhs >= 0) {
+                long idx_lhs = (lhs->shape[dim_lhs] == 1) ? 0 : idx_batch;
+                offset_lhs += idx_lhs * lhs->stride[dim_lhs];
+            }
+            int dim_rhs = j - (ndim - rhs->ndim);
+            if (dim_rhs >= 0) {
+                long idx_rhs = (rhs->shape[dim_rhs] == 1) ? 0 : idx_batch;
+                offset_rhs += idx_rhs * rhs->stride[dim_rhs];
+            }
+            remaining /= shape[j];
+        }
+        float *out_data = out->data + (i * stride_batch);
+        const float *lhs_data = lhs->data + offset_lhs;
+        const float *rhs_data = rhs->data + offset_rhs;
+        matmul(out_data, stride_out, lhs_data, stride_lhs, rhs_data, stride_rhs, rows, cols, inner,
+               trans_lhs, trans_rhs);
+    }
+
+    stack_restore();
+    return out;
+}
+
 // i/o
 
 static void print_data(const Tensor *self, long offset, int dim)
@@ -2122,6 +2243,76 @@ static void test_argreduction(void)
     tensor_frame_end();
 }
 
+static void test_processing(void)
+{
+    tensor_frame_begin();
+
+    // softmax: same shape, sum to 1
+    Tensor *src = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
+    Tensor *out = tensor_softmax(src, 0);
+    ensure(out->ndim == 1 && out->shape[0] == 3 && tensor_sum(out, 0, 0)->data[0] == 1);
+    ensure(isclose(out->data[0], 0.090030573F) && isclose(out->data[1], 0.24472848F) &&
+           isclose(out->data[2], 0.66524094F));
+
+    // log_softmax: same shape
+    out = tensor_log_softmax(src, 0);
+    ensure(out->ndim == 1 && out->shape[0] == 3);
+    ensure(isclose(out->data[0], -2.4076059F) && isclose(out->data[1], -1.4076059F) &&
+           isclose(out->data[2], -0.40760595F));
+
+    // softmax: 2D along axis 0
+    src = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
+    out = tensor_softmax(src, 0);
+    ensure(out->ndim == 2 && out->shape[0] == 2 && out->shape[1] == 2);
+    ensure(isclose(out->data[0], 0.11920292F) && isclose(out->data[2], 0.88079708F));
+
+    // matmul: general rectangular (2x3 @ 3x2 -> 2x2)
+    Tensor *lhs = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    Tensor *rhs = tensor_from((int[]){3, 2}, 2, (float[]){7, 8, 9, 10, 11, 12});
+    out = tensor_matmul(lhs, rhs);
+    ensure(out->ndim == 2 && out->shape[0] == 2 && out->shape[1] == 2);
+    ensure(out->data[0] == 58 && out->data[1] == 64 && out->data[2] == 139 && out->data[3] == 154);
+
+    // outer product (3x1 @ 1x3 -> 3x3)
+    lhs = tensor_from((int[]){3, 1}, 2, (float[]){1, 2, 3});
+    rhs = tensor_from((int[]){1, 3}, 2, (float[]){4, 5, 6});
+    out = tensor_matmul(lhs, rhs);
+    ensure(out->ndim == 2 && out->shape[0] == 3 && out->shape[1] == 3);
+    ensure(out->data[0] == 4 && out->data[1] == 5 && out->data[2] == 6 && out->data[3] == 8 &&
+           out->data[4] == 10 && out->data[5] == 12 && out->data[6] == 12 && out->data[7] == 15 &&
+           out->data[8] == 18);
+
+    // inner / dot product (1x3 @ 3x1 -> 1x1)
+    out = tensor_matmul(rhs, lhs);  // NOLINT(readability-suspicious-call-argument)
+    ensure(out->ndim == 2 && out->shape[0] == 1 && out->shape[1] == 1);
+    ensure(out->data[0] == 32);  // 4*1 + 5*2 + 6*3 = 32
+
+    // matrix-vector style (2x2 @ 2x1 -> 2x1)
+    lhs = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
+    rhs = tensor_from((int[]){2, 1}, 2, (float[]){5, 6});
+    out = tensor_matmul(lhs, rhs);
+    ensure(out->ndim == 2 && out->shape[0] == 2 && out->shape[1] == 1);
+    ensure(out->data[0] == 17 && out->data[1] == 39);
+
+    // batch matmul with broadcasting: (2, 2, 2) @ (2, 2) -> (2, 2, 2)
+    lhs = tensor_from((int[]){2, 2, 2}, 3, (float[]){1, 0, 0, 1, 2, 0, 0, 2});
+    rhs = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
+    out = tensor_matmul(lhs, rhs);
+    ensure(out->ndim == 3 && out->shape[0] == 2 && out->shape[1] == 2 && out->shape[2] == 2);
+    ensure(out->data[0] == 1 && out->data[1] == 2 && out->data[2] == 3 && out->data[3] == 4);
+    ensure(out->data[4] == 2 && out->data[5] == 4 && out->data[6] == 6 && out->data[7] == 8);
+
+    // matmul with transposed input: (2, 3) @ (3, 2)
+    lhs = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    rhs = tensor_from((int[]){2, 3}, 2, (float[]){1, 1, 1, 2, 2, 2});
+    rhs = tensor_transpose(rhs, 0, 1);  // now (3, 2)
+    out = tensor_matmul(lhs, rhs);
+    ensure(out->ndim == 2 && out->shape[0] == 2 && out->shape[1] == 2);
+    ensure(out->data[0] == 6 && out->data[1] == 12 && out->data[2] == 15 && out->data[3] == 30);
+
+    tensor_frame_end();
+}
+
 static void test_io(void)
 {
     tensor_frame_begin();
@@ -2179,5 +2370,6 @@ int main(void)
     test_binary();
     test_reduction();
     test_argreduction();
+    test_processing();
     test_io();
 }
