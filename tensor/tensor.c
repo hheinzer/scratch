@@ -1328,6 +1328,31 @@ static void reduce_any(float *out, const float *src, long stride_src, long num)
     }
 }
 
+static void reduce_var(float *out, const float *src, long stride_src, long num)
+{
+    float mean = 0;
+    for (long i = 0; i < num; i++) {
+        mean += src[i * stride_src];
+    }
+    mean /= (float)num;
+    float acc = 0;
+    for (long i = 0; i < num; i++) {
+        float dev = src[i * stride_src] - mean;
+        acc += dev * dev;
+    }
+    *out = acc / (float)num;
+}
+
+static void reduce_sum_of_squares(float *out, const float *src, long stride_src, long num)
+{
+    float acc = 0;
+    for (long i = 0; i < num; i++) {
+        float val = src[i * stride_src];
+        acc += val * val;
+    }
+    *out = acc;
+}
+
 static void apply_reduce(Tensor *out, long offset_out, const Tensor *src, long offset_src, int dim,
                          Reduce *func, int axis)
 {
@@ -1428,17 +1453,25 @@ Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
 
 Tensor *tensor_var(const Tensor *src, int axis, int keepdim)
 {
-    return tensor_mean(tensor_square(tensor_sub(src, tensor_mean(src, axis, 1))), axis, keepdim);
+    return reduce(src, axis, keepdim, reduce_var);
 }
 
 Tensor *tensor_std(const Tensor *src, int axis, int keepdim)
 {
-    return tensor_sqrt(tensor_var(src, axis, keepdim));
+    Tensor *out = reduce(src, axis, keepdim, reduce_var);
+    for (long i = 0; i < out->numel; i++) {
+        out->data[i] = sqrtf(out->data[i]);
+    }
+    return out;
 }
 
 Tensor *tensor_norm(const Tensor *src, int axis, int keepdim)
 {
-    return tensor_sqrt(tensor_sum(tensor_square(src), axis, keepdim));
+    Tensor *out = reduce(src, axis, keepdim, reduce_sum_of_squares);
+    for (long i = 0; i < out->numel; i++) {
+        out->data[i] = sqrtf(out->data[i]);
+    }
+    return out;
 }
 
 // argreduction
@@ -1570,7 +1603,13 @@ Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs)
 {
     assert(lhs && rhs && lhs->ndim == 1 && rhs->ndim == 1);
     assert(lhs->shape[0] == rhs->shape[0]);
-    return tensor_sum(tensor_mul(lhs, rhs), INT_MAX, 0);
+    Tensor *out = tensor_empty(0, 0);
+    float sum = 0;
+    for (int i = 0; i < lhs->shape[0]; i++) {
+        sum += lhs->data[i * lhs->stride[0]] * rhs->data[i * rhs->stride[0]];
+    }
+    out->data[0] = sum;
+    return out;
 }
 
 static const Tensor *matmul_prepare(const Tensor *src, long *stride, int *trans)
