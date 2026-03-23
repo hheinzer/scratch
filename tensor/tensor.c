@@ -83,6 +83,11 @@ Tensor *tensor_sum(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_prod(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_mean(const Tensor *src, int axis, int keepdim);
 
+// argreduction
+
+void tensor_argmin(const Tensor *src, long *index, int axis);
+void tensor_argmax(const Tensor *src, long *index, int axis);
+
 // i/o
 
 void tensor_print(const Tensor *self);
@@ -1273,13 +1278,7 @@ static void apply_reduce(Tensor *out, long off_out, const Tensor *src, long off_
         apply_reduce(out, off_out, src, off_src, dim + 1, func, axis);
     }
     else {
-        int dim_out;
-        if (out->ndim == src->ndim || dim < axis) {
-            dim_out = dim;
-        }
-        else {
-            dim_out = dim - 1;
-        }
+        int dim_out = (out->ndim == src->ndim || dim < axis) ? dim : (dim - 1);
         for (int i = 0; i < src->shape[dim]; i++) {
             apply_reduce(out, off_out + (i * out->stride[dim_out]), src,
                          off_src + (i * src->stride[dim]), dim + 1, func, axis);
@@ -1354,6 +1353,97 @@ Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
         out->data[i] /= (float)count;
     }
     return out;
+}
+
+// argreduction
+
+typedef void ArgReduce(long *, const float *, long, long);
+
+static void argreduce_min(long *index, const float *src, long str_src, long num)
+{
+    float acc = src[0];
+    long arg = 0;
+    for (long i = 1; i < num; i++) {
+        float val = src[i * str_src];
+        if (val < acc) {
+            acc = val;
+            arg = i;
+        }
+    }
+    *index = arg;
+}
+
+static void argreduce_max(long *index, const float *src, long str_src, long num)
+{
+    float acc = src[0];
+    long arg = 0;
+    for (long i = 1; i < num; i++) {
+        float val = src[i * str_src];
+        if (val > acc) {
+            acc = val;
+            arg = i;
+        }
+    }
+    *index = arg;
+}
+
+static void apply_argreduce(const long *stride, long *index, long off_index, const Tensor *src,
+                            long off_src, int dim, ArgReduce *func, int axis)
+{
+    if (dim == src->ndim) {
+        func(index + off_index, src->data + off_src, src->stride[axis], src->shape[axis]);
+        return;
+    }
+    if (dim == axis) {
+        apply_argreduce(stride, index, off_index, src, off_src, dim + 1, func, axis);
+    }
+    else {
+        int dim_out = (dim < axis) ? dim : (dim - 1);
+        for (int i = 0; i < src->shape[dim]; i++) {
+            apply_argreduce(stride, index, off_index + (i * stride[dim_out]), src,
+                            off_src + (i * src->stride[dim]), dim + 1, func, axis);
+        }
+    }
+}
+
+static void argreduce(const Tensor *src, long *index, int axis, ArgReduce *func)
+{
+    assert(src && index && func);
+    if (axis == INT_MAX) {
+        if (is_contiguous(src)) {
+            func(index, src->data, 1, src->numel);
+        }
+        else {
+            stack_save();
+            Tensor *contiguous = tensor_contiguous(src);
+            func(index, contiguous->data, 1, contiguous->numel);
+            stack_restore();
+        }
+        return;
+    }
+    axis = normalize_dim(axis, src->ndim);
+    int shape[MAX_NDIM];
+    int ndim = 0;
+    for (int i = 0; i < src->ndim; i++) {
+        if (i != axis) {
+            shape[ndim++] = src->shape[i];
+        }
+    }
+    long stride[MAX_NDIM];
+    if (ndim > 0) {
+        compute_stride(stride, shape, ndim);
+    }
+    apply_argreduce(stride, index, 0, src, 0, 0, func, axis);
+}
+
+void tensor_argmin(const Tensor *src, long *index, int axis)
+{
+    argreduce(src, index, axis, argreduce_min);
+}
+
+void tensor_argmax(const Tensor *src, long *index, int axis)
+{
+    argreduce(src, index, axis, argreduce_max);
 }
 
 // i/o
@@ -1846,6 +1936,50 @@ static void test_reduction(void)
     tensor_frame_end();
 }
 
+static void test_argreduction(void)
+{
+    tensor_frame_begin();
+
+    // argmin / argmax along axis: [[3,1,4],[1,5,9]] -> argmin row = [1,0], argmax row = [2,2]
+    Tensor *src = tensor_from((int[]){2, 3}, 2, (float[]){3, 1, 4, 1, 5, 9});
+    long row[2];
+    tensor_argmin(src, row, 1);
+    ensure(row[0] == 1 && row[1] == 0);
+    tensor_argmax(src, row, 1);
+    ensure(row[0] == 2 && row[1] == 2);
+
+    // axis 0: argmin col = [1,0,0], argmax col = [0,1,1]
+    long col[3];
+    tensor_argmin(src, col, 0);
+    ensure(col[0] == 1 && col[1] == 0 && col[2] == 0);
+    tensor_argmax(src, col, 0);
+    ensure(col[0] == 0 && col[1] == 1 && col[2] == 1);
+
+    // global reduction (axis == INT_MAX): flat [3,1,4,1,5,9], argmin=1, argmax=5
+    long flat;
+    tensor_argmin(src, &flat, INT_MAX);
+    ensure(flat == 1);
+    tensor_argmax(src, &flat, INT_MAX);
+    ensure(flat == 5);
+
+    // 1-D input reduced along its only axis -> scalar output (ndim=0 path)
+    src = tensor_from((int[]){4}, 1, (float[]){5, 2, 8, 1});
+    tensor_argmin(src, &flat, 0);
+    ensure(flat == 3);
+    tensor_argmax(src, &flat, 0);
+    ensure(flat == 2);
+
+    // non-contiguous input (transposed): [[1,4],[2,5],[3,6]], argmin along dim 0 -> [0,0]
+    src = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    src = tensor_transpose(src, 0, 1);  // [3, 2]
+    tensor_argmin(src, row, 0);
+    ensure(row[0] == 0 && row[1] == 0);
+    tensor_argmax(src, row, 0);
+    ensure(row[0] == 2 && row[1] == 2);
+
+    tensor_frame_end();
+}
+
 int main(void)
 {
     test_creation();
@@ -1853,4 +1987,5 @@ int main(void)
     test_unary();
     test_binary();
     test_reduction();
+    test_argreduction();
 }
