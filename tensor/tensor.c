@@ -4,6 +4,11 @@
 
 typedef struct tensor Tensor;
 
+// context
+
+void tensor_frame_begin(void);
+void tensor_frame_end(void);
+
 // creation
 
 Tensor *tensor_empty(const int *shape, int ndim);
@@ -145,9 +150,6 @@ static void *stack_memdup(const void *ptr, size_t num, size_t size)
     return (dup && ptr) ? memcpy(dup, ptr, num * size) : 0;
 }
 
-static int g_index = 0;
-static Stack *g_save[MAX_SAVE];
-
 static void *stack_pop(void)
 {
     assert(g_head);
@@ -158,13 +160,8 @@ static void *stack_pop(void)
     return ptr;
 }
 
-static void stack_clear(void)
-{
-    while (g_head) {
-        free(stack_pop());
-    }
-    g_index = 0;
-}
+static int g_index = 0;
+static Stack *g_save[MAX_SAVE];
 
 static void stack_save(void)
 {
@@ -179,6 +176,18 @@ static void stack_restore(void)
     while (g_head != save) {
         free(stack_pop());
     }
+}
+
+// context
+
+void tensor_frame_begin(void)
+{
+    stack_save();
+}
+
+void tensor_frame_end(void)
+{
+    stack_restore();
 }
 
 // creation
@@ -1411,7 +1420,7 @@ void tensor_print(const Tensor *self)
 
 static void test_creation(void)
 {
-    stack_save();
+    tensor_frame_begin();
 
     // tensor_empty
     Tensor *tensor = tensor_empty((int[]){2, 3}, 2);
@@ -1486,12 +1495,12 @@ static void test_creation(void)
     tensor = tensor_randn((int[]){100}, 1);
     ensure(tensor->numel == 100);
 
-    stack_restore();
+    tensor_frame_end();
 }
 
 static void test_movement(void)
 {
-    stack_save();
+    tensor_frame_begin();
 
     // tensor_reshape: [6] -> [2, 3]
     Tensor *tensor = tensor_arange(1, 7, 1);
@@ -1619,12 +1628,12 @@ static void test_movement(void)
     ensure(tensor->ndim == 2 && tensor->shape[0] == 2 && tensor->shape[1] == 3);
     ensure(tensor->data[0] == 1 && tensor->data[3] == 4);
 
-    stack_restore();
+    tensor_frame_end();
 }
 
 static void test_unary(void)
 {
-    stack_save();
+    tensor_frame_begin();
 
     // tensor_neg
     Tensor *src = tensor_from((int[]){3}, 1, (float[]){-1, 0, 2});
@@ -1693,12 +1702,12 @@ static void test_unary(void)
     out = tensor_neg(src);
     ensure(out->data[0] == -1 && out->data[1] == -3 && out->data[2] == -2 && out->data[3] == -4);
 
-    stack_restore();
+    tensor_frame_end();
 }
 
 static void test_binary(void)
 {
-    stack_save();
+    tensor_frame_begin();
 
     Tensor *lhs = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
     Tensor *rhs = tensor_from((int[]){3}, 1, (float[]){4, 5, 6});
@@ -1781,12 +1790,12 @@ static void test_binary(void)
     out = tensor_add(lhs, rhs);
     ensure(out->data[0] == 11 && out->data[3] == 14 && out->data[5] == 36);
 
-    stack_restore();
+    tensor_frame_end();
 }
 
 static void test_reduction(void)
 {
-    stack_save();
+    tensor_frame_begin();
 
     // tensor_min / tensor_max along axis
     Tensor *src = tensor_from((int[]){2, 3}, 2, (float[]){3, 1, 4, 1, 5, 9});
@@ -1834,7 +1843,7 @@ static void test_reduction(void)
     out = tensor_sum(src, 0, 0);        // sum along dim 0 -> [6, 15]
     ensure(out->data[0] == 1 + 2 + 3 && out->data[1] == 4 + 5 + 6);
 
-    stack_restore();
+    tensor_frame_end();
 }
 
 int main(void)
@@ -1844,5 +1853,4 @@ int main(void)
     test_unary();
     test_binary();
     test_reduction();
-    stack_clear();
 }
