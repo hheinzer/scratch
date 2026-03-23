@@ -542,6 +542,16 @@ Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1)
     return out;
 }
 
+Tensor *tensor_flip(const Tensor *src, int dim)
+{
+    assert(src);
+    dim = normalize_dim(dim, src->ndim);
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    out->data += (src->shape[dim] - 1) * src->stride[dim];
+    out->stride[dim] = -src->stride[dim];
+    return out;
+}
+
 Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
 {
     assert(src && step != 0);
@@ -769,6 +779,27 @@ static void unary_log(float *out, const float *src, long stride_src, int num)
     }
 }
 
+static void unary_floor(float *out, const float *src, long stride_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = floorf(src[i * stride_src]);
+    }
+}
+
+static void unary_ceil(float *out, const float *src, long stride_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = ceilf(src[i * stride_src]);
+    }
+}
+
+static void unary_round(float *out, const float *src, long stride_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = roundf(src[i * stride_src]);
+    }
+}
+
 static void unary_relu(float *out, const float *src, long stride_src, int num)
 {
     for (int i = 0; i < num; i++) {
@@ -863,6 +894,21 @@ Tensor *tensor_exp(const Tensor *src)
 Tensor *tensor_log(const Tensor *src)
 {
     return unary(src, unary_log);
+}
+
+Tensor *tensor_floor(const Tensor *src)
+{
+    return unary(src, unary_floor);
+}
+
+Tensor *tensor_ceil(const Tensor *src)
+{
+    return unary(src, unary_ceil);
+}
+
+Tensor *tensor_round(const Tensor *src)
+{
+    return unary(src, unary_round);
 }
 
 Tensor *tensor_relu(const Tensor *src)
@@ -1205,6 +1251,28 @@ static void reduce_prod(float *out, const float *src, long stride_src, long num)
     *out = acc;
 }
 
+static void reduce_all(float *out, const float *src, long stride_src, long num)
+{
+    *out = 1;
+    for (long i = 0; i < num; i++) {
+        if (src[i * stride_src] == 0) {
+            *out = 0;
+            return;
+        }
+    }
+}
+
+static void reduce_any(float *out, const float *src, long stride_src, long num)
+{
+    *out = 0;
+    for (long i = 0; i < num; i++) {
+        if (src[i * stride_src] != 0) {
+            *out = 1;
+            return;
+        }
+    }
+}
+
 static void apply_reduce(Tensor *out, long offset_out, const Tensor *src, long offset_src, int dim,
                          Reduce *func, int axis)
 {
@@ -1281,6 +1349,16 @@ Tensor *tensor_sum(const Tensor *src, int axis, int keepdim)
 Tensor *tensor_prod(const Tensor *src, int axis, int keepdim)
 {
     return reduce(src, axis, keepdim, reduce_prod);
+}
+
+Tensor *tensor_all(const Tensor *src, int axis, int keepdim)
+{
+    return reduce(src, axis, keepdim, reduce_all);
+}
+
+Tensor *tensor_any(const Tensor *src, int axis, int keepdim)
+{
+    return reduce(src, axis, keepdim, reduce_any);
 }
 
 Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)

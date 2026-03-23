@@ -177,6 +177,18 @@ static void test_movement(void)
     ensure(tensor_data(tensor)[(tensor_stride(tensor)[0] * 1) + (tensor_stride(tensor)[1] * 0)] ==
            2);
 
+    // tensor_flip along axis 0: [1,2,3] -> [3,2,1]
+    tensor = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
+    tensor = tensor_contiguous(tensor_flip(tensor, 0));
+    ensure(tensor_data(tensor)[0] == 3 && tensor_data(tensor)[1] == 2 &&
+           tensor_data(tensor)[2] == 1);
+
+    // tensor_flip along axis 1: [[1,2],[3,4]] -> [[2,1],[4,3]]
+    tensor = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
+    tensor = tensor_contiguous(tensor_flip(tensor, 1));
+    ensure(tensor_data(tensor)[0] == 2 && tensor_data(tensor)[1] == 1 &&
+           tensor_data(tensor)[2] == 4 && tensor_data(tensor)[3] == 3);
+
     // tensor_slice: [0,1,2,3,4,5] slice [1:4] -> [1,2,3]
     tensor = tensor_arange(0, 6, 1);
     tensor = tensor_slice(tensor, 0, 1, 4, 1);
@@ -300,6 +312,21 @@ static void test_unary(void)
     src = tensor_from((int[]){2}, 1, (float[]){1, exp1});
     out = tensor_log(src);
     ensure(tensor_data(out)[0] == logf(1) && isclose(tensor_data(out)[1], 1));
+
+    // tensor_floor: [-1.7, 1.2, 2.9] -> [-2, 1, 2]
+    src = tensor_from((int[]){3}, 1, (float[]){-1.7F, 1.2F, 2.9F});
+    out = tensor_floor(src);
+    ensure(tensor_data(out)[0] == -2 && tensor_data(out)[1] == 1 && tensor_data(out)[2] == 2);
+
+    // tensor_ceil: [-1.7, 1.2, 2.9] -> [-1, 2, 3]
+    src = tensor_from((int[]){3}, 1, (float[]){-1.7F, 1.2F, 2.9F});
+    out = tensor_ceil(src);
+    ensure(tensor_data(out)[0] == -1 && tensor_data(out)[1] == 2 && tensor_data(out)[2] == 3);
+
+    // tensor_round: [-1.7, 0.2, 1.5] -> [-2, 0, 2] (half away from zero)
+    src = tensor_from((int[]){3}, 1, (float[]){-1.7F, 0.2F, 1.5F});
+    out = tensor_round(src);
+    ensure(tensor_data(out)[0] == -2 && tensor_data(out)[1] == 0 && tensor_data(out)[2] == 2);
 
     // tensor_relu
     src = tensor_from((int[]){3}, 1, (float[]){-1, 0, 2});
@@ -446,7 +473,34 @@ static void test_reduction(void)
     out = tensor_prod(src, 1, 0);
     ensure(tensor_data(out)[0] == 6 && tensor_data(out)[1] == 120);
 
+    // tensor_all: [1, 1, 1] -> 1; [1, 0, 1] -> 0
+    src = tensor_from((int[]){3}, 1, (float[]){1, 1, 1});
+    out = tensor_all(src, INT_MAX, 0);
+    ensure(tensor_data(out)[0] == 1);
+    src = tensor_from((int[]){3}, 1, (float[]){1, 0, 1});
+    out = tensor_all(src, INT_MAX, 0);
+    ensure(tensor_data(out)[0] == 0);
+
+    // tensor_all along axis: [[1,1],[1,0]] -> [1, 0]
+    src = tensor_from((int[]){2, 2}, 2, (float[]){1, 1, 1, 0});
+    out = tensor_all(src, 1, 0);
+    ensure(tensor_data(out)[0] == 1 && tensor_data(out)[1] == 0);
+
+    // tensor_any: [0, 0, 0] -> 0; [0, 1, 0] -> 1
+    src = tensor_from((int[]){3}, 1, (float[]){0, 0, 0});
+    out = tensor_any(src, INT_MAX, 0);
+    ensure(tensor_data(out)[0] == 0);
+    src = tensor_from((int[]){3}, 1, (float[]){0, 1, 0});
+    out = tensor_any(src, INT_MAX, 0);
+    ensure(tensor_data(out)[0] == 1);
+
+    // tensor_any along axis: [[0,0],[0,1]] -> [0, 1]
+    src = tensor_from((int[]){2, 2}, 2, (float[]){0, 0, 0, 1});
+    out = tensor_any(src, 1, 0);
+    ensure(tensor_data(out)[0] == 0 && tensor_data(out)[1] == 1);
+
     // tensor_mean along axis
+    src = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
     out = tensor_mean(src, 0, 0);
     ensure(isclose(tensor_data(out)[0], 2.5F) && isclose(tensor_data(out)[1], 3.5F) &&
            isclose(tensor_data(out)[2], 4.5F));
