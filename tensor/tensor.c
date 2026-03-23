@@ -1125,13 +1125,13 @@ static void apply_binary(Tensor *out, long offset_out, const Tensor *lhs, long o
     }
 }
 
-static Tensor *binary(const Tensor *lhs_, const Tensor *rhs_, Binary *func)
+static Tensor *binary(const Tensor *lhs, const Tensor *rhs, Binary *func)
 {
-    assert(lhs_ && rhs_ && func);
+    assert(lhs && rhs && func);
     int shape[MAX_NDIM];
-    int ndim = broadcast_shape(shape, lhs_, rhs_);
-    Tensor *lhs = tensor_expand(lhs_, shape, ndim);
-    Tensor *rhs = tensor_expand(rhs_, shape, ndim);
+    int ndim = broadcast_shape(shape, lhs, rhs);
+    lhs = tensor_expand(lhs, shape, ndim);
+    rhs = tensor_expand(rhs, shape, ndim);
     Tensor *out = tensor_empty(shape, ndim);
     if (ndim == 0) {
         func(out->data, lhs->data, 0, rhs->data, 0, 1);
@@ -1469,7 +1469,7 @@ static void print_data(const Tensor *self, long offset, int dim)
     printf("[");
     if (dim == self->ndim - 1) {
         for (int i = 0; i < self->shape[dim]; i++) {
-            printf("%g", self->data[offset + (i * self->stride[dim])]);
+            printf("%.8g", self->data[offset + (i * self->stride[dim])]);
             if (i < self->shape[dim] - 1) {
                 printf(" ");
             }
@@ -1504,7 +1504,7 @@ void tensor_print(const Tensor *self)
     }
     printf("])\n");
     if (self->ndim == 0) {
-        printf("%g", self->data[0]);
+        printf("%.8g", self->data[0]);
     }
     else {
         print_data(self, 0, 0);
@@ -1531,7 +1531,7 @@ void tensor_save(const Tensor *self, const char *fname)
             slen += sprintf(shape + slen, ", ");
         }
     }
-    if (self->ndim <= 1) {
+    if (self->ndim == 1) {
         slen += sprintf(shape + slen, ",");
     }
     slen += sprintf(shape + slen, ")");
@@ -2152,6 +2152,21 @@ static void test_io(void)
     load = tensor_load("/tmp/tensor.npy");
     ensure(load->ndim == 2 && load->shape[0] == 2 && load->shape[1] == 3);
     ensure(load->data[0] == 4 && load->data[1] == 5 && load->data[5] == 9);
+
+    // 0D tensor (scalar)
+    save = tensor_from(0, 0, (float[]){42});
+    tensor_save(save, "/tmp/scalar.npy");
+
+    load = tensor_load("/tmp/scalar.npy");
+    ensure(load->ndim == 0 && load->numel == 1 && load->data[0] == 42);
+
+    ensure(system("python3 -c \""
+                  "import numpy as np;"
+                  "a = np.load('/tmp/scalar.npy');"
+                  "assert a.shape == ();"
+                  "assert a.dtype == np.float32;"
+                  "assert a == 42"
+                  "\"") == 0);
 
     tensor_frame_end();
 }
