@@ -631,7 +631,7 @@ static void test_processing(void)
     ensure(isclose(tensor_data(out)[0], -2.4076059F) && isclose(tensor_data(out)[1], -1.4076059F) &&
            isclose(tensor_data(out)[2], -0.40760595F));
 
-    // cross_entropy: logits [[1,2,3],[1,2,3]], targets [2,0] -> mean(-lsm[0][2], -lsm[1][0])
+    // cross_entropy: logits [[1,2,3],[1,2,3]], targets [2,0] -> mean(-log_prob[0][2], -log_prob[1][0])
     src = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 1, 2, 3});
     Tensor *tgt = tensor_from((int[]){2}, 1, (float[]){2, 0});
     out = tensor_cross_entropy(src, tgt);
