@@ -82,7 +82,7 @@ static void test_creation(void)
     ensure(isclose(tensor_data(tensor)[0], 1) && isclose(tensor_data(tensor)[1], 10) &&
            isclose(tensor_data(tensor)[2], 100));
 
-    // tensor_eye: 3x2, diagonal is 1
+    // tensor_eye: shape [3, 2], diagonal is 1
     tensor = tensor_eye(3, 2);
     ensure(tensor_shape(tensor)[0] == 3 && tensor_shape(tensor)[1] == 2);
     ensure(tensor_data(tensor)[0] == 1 && tensor_data(tensor)[1] == 0);  // row 0
@@ -114,7 +114,7 @@ static void test_movement(void)
            tensor_shape(tensor)[1] == 3);
     ensure(tensor_data(tensor)[0] == 1 && tensor_data(tensor)[5] == 6);
 
-    // tensor_reshape: infer dim with -1
+    // tensor_reshape: infer dim with -1, [6] -> [2, 3]
     tensor = tensor_arange(1, 7, 1);
     tensor = tensor_reshape(tensor, (int[]){-1, 3}, 2);
     ensure(tensor_shape(tensor)[0] == 2 && tensor_shape(tensor)[1] == 3);
@@ -125,7 +125,7 @@ static void test_movement(void)
     tensor = tensor_flatten(tensor, 0, 1);
     ensure(tensor_ndim(tensor) == 1 && tensor_numel(tensor) == 6);
 
-    // tensor_flatten_all
+    // tensor_flatten: all dims (INT_MIN to INT_MAX) of [2, 3] -> [6]
     tensor = tensor_arange(1, 7, 1);
     tensor = tensor_reshape(tensor, (int[]){2, 3}, 2);
     tensor = tensor_flatten(tensor, INT_MIN, INT_MAX);
@@ -243,6 +243,15 @@ static void test_movement(void)
     ensure(tensor_ndim(tensor) == 2 && tensor_shape(tensor)[0] == 2 &&
            tensor_shape(tensor)[1] == 3);
     ensure(tensor_data(tensor)[0] == 1 && tensor_data(tensor)[3] == 4);
+
+    // tensor_contiguous: transposed non-contiguous [2, 3] -> contiguous [3, 2]
+    tensor = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    tensor = tensor_transpose(tensor, 0, 1);
+    tensor = tensor_contiguous(tensor);
+    ensure(tensor_stride(tensor)[0] == 2 && tensor_stride(tensor)[1] == 1);
+    ensure(tensor_data(tensor)[0] == 1 && tensor_data(tensor)[1] == 4);  // row 0: [1, 4]
+    ensure(tensor_data(tensor)[2] == 2 && tensor_data(tensor)[3] == 5);  // row 1: [2, 5]
+    ensure(tensor_data(tensor)[4] == 3 && tensor_data(tensor)[5] == 6);  // row 2: [3, 6]
 
     tensor_frame_end();
 }
@@ -428,10 +437,12 @@ static void test_reduction(void)
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 1 && tensor_shape(out)[1] == 3);
     ensure(tensor_data(out)[0] == 1 && tensor_data(out)[1] == 1 && tensor_data(out)[2] == 4);
 
-    // tensor_sum / tensor_prod along axis
+    // tensor_sum along axis 0: [[1,2,3],[4,5,6]] -> [5, 7, 9]
     src = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
     out = tensor_sum(src, 0, 0);
     ensure(tensor_data(out)[0] == 5 && tensor_data(out)[1] == 7 && tensor_data(out)[2] == 9);
+
+    // tensor_prod along axis 1: [[1,2,3],[4,5,6]] -> [6, 120]
     out = tensor_prod(src, 1, 0);
     ensure(tensor_data(out)[0] == 6 && tensor_data(out)[1] == 120);
 
@@ -440,7 +451,7 @@ static void test_reduction(void)
     ensure(isclose(tensor_data(out)[0], 2.5F) && isclose(tensor_data(out)[1], 3.5F) &&
            isclose(tensor_data(out)[2], 4.5F));
 
-    // full reduction (axis == INT_MAX)
+    // full reduction (axis == INT_MAX): result is 0-dim scalar
     out = tensor_sum(src, INT_MAX, 0);
     ensure(tensor_ndim(out) == 0 && isclose(tensor_data(out)[0], 21));
     out = tensor_min(src, INT_MAX, 0);
@@ -449,6 +460,8 @@ static void test_reduction(void)
     ensure(tensor_data(out)[0] == 6);
     out = tensor_mean(src, INT_MAX, 0);
     ensure(isclose(tensor_data(out)[0], 3.5F));
+    out = tensor_prod(src, INT_MAX, 0);
+    ensure(isclose(tensor_data(out)[0], 720));
 
     // full reduction keepdim
     out = tensor_sum(src, INT_MAX, 1);
@@ -466,9 +479,14 @@ static void test_reduction(void)
     out = tensor_var(src, 0, 0);
     ensure(isclose(tensor_data(out)[0], 8 / 3.0F));
 
-    // tensor_std: std = sqrt(var)
+    // tensor_std: global std = sqrt(var)
     out = tensor_std(src, 0, 0);
     ensure(isclose(tensor_data(out)[0], sqrtf(8 / 3.0F)));
+
+    // tensor_std along axis 1: [[0,2],[4,6]] -> std per row = [1, 1]
+    src = tensor_from((int[]){2, 2}, 2, (float[]){0, 2, 4, 6});
+    out = tensor_std(src, 1, 0);
+    ensure(isclose(tensor_data(out)[0], 1) && isclose(tensor_data(out)[1], 1));
 
     // var along axis of 2D: [[1,3],[2,4]] -> row vars = [1, 1]
     src = tensor_from((int[]){2, 2}, 2, (float[]){1, 3, 2, 4});
@@ -541,7 +559,7 @@ static void test_processing(void)
 {
     tensor_frame_begin();
 
-    // softmax: same shape, sum to 1
+    // softmax: same shape, values sum to 1, correct per-element values
     Tensor *src = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
     Tensor *out = tensor_softmax(src, 0);
     ensure(tensor_ndim(out) == 1 && tensor_shape(out)[0] == 3 &&
@@ -549,7 +567,7 @@ static void test_processing(void)
     ensure(isclose(tensor_data(out)[0], 0.090030573F) &&
            isclose(tensor_data(out)[1], 0.24472848F) && isclose(tensor_data(out)[2], 0.66524094F));
 
-    // log_softmax: same shape
+    // log_softmax: same shape and correct per-element values
     out = tensor_log_softmax(src, 0);
     ensure(tensor_ndim(out) == 1 && tensor_shape(out)[0] == 3);
     ensure(isclose(tensor_data(out)[0], -2.4076059F) && isclose(tensor_data(out)[1], -1.4076059F) &&
@@ -561,7 +579,7 @@ static void test_processing(void)
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 2 && tensor_shape(out)[1] == 2);
     ensure(isclose(tensor_data(out)[0], 0.11920292F) && isclose(tensor_data(out)[2], 0.88079708F));
 
-    // matmul: general rectangular (2x3 @ 3x2 -> 2x2)
+    // matmul: general rectangular [2, 3] @ [3, 2] -> [2, 2]
     Tensor *lhs = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
     Tensor *rhs = tensor_from((int[]){3, 2}, 2, (float[]){7, 8, 9, 10, 11, 12});
     out = tensor_matmul(lhs, rhs);
@@ -569,7 +587,7 @@ static void test_processing(void)
     ensure(tensor_data(out)[0] == 58 && tensor_data(out)[1] == 64 && tensor_data(out)[2] == 139 &&
            tensor_data(out)[3] == 154);
 
-    // outer product (3x1 @ 1x3 -> 3x3)
+    // outer product: [3, 1] @ [1, 3] -> [3, 3]
     lhs = tensor_from((int[]){3, 1}, 2, (float[]){1, 2, 3});
     rhs = tensor_from((int[]){1, 3}, 2, (float[]){4, 5, 6});
     out = tensor_matmul(lhs, rhs);
@@ -578,19 +596,19 @@ static void test_processing(void)
            tensor_data(out)[3] == 8 && tensor_data(out)[4] == 10 && tensor_data(out)[5] == 12 &&
            tensor_data(out)[6] == 12 && tensor_data(out)[7] == 15 && tensor_data(out)[8] == 18);
 
-    // inner / dot product (1x3 @ 3x1 -> 1x1)
+    // inner product: [1, 3] @ [3, 1] -> [1, 1]
     out = tensor_matmul(rhs, lhs);  // NOLINT(readability-suspicious-call-argument)
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 1 && tensor_shape(out)[1] == 1);
     ensure(tensor_data(out)[0] == 32);  // 4*1 + 5*2 + 6*3 = 32
 
-    // matrix-vector style (2x2 @ 2x1 -> 2x1)
+    // matrix-vector: [2, 2] @ [2, 1] -> [2, 1]
     lhs = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
     rhs = tensor_from((int[]){2, 1}, 2, (float[]){5, 6});
     out = tensor_matmul(lhs, rhs);
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 2 && tensor_shape(out)[1] == 1);
     ensure(tensor_data(out)[0] == 17 && tensor_data(out)[1] == 39);
 
-    // batch matmul with broadcasting: (2, 2, 2) @ (2, 2) -> (2, 2, 2)
+    // batch matmul with broadcasting: [2, 2, 2] @ [2, 2] -> [2, 2, 2]
     lhs = tensor_from((int[]){2, 2, 2}, 3, (float[]){1, 0, 0, 1, 2, 0, 0, 2});
     rhs = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
     out = tensor_matmul(lhs, rhs);
@@ -601,14 +619,23 @@ static void test_processing(void)
     ensure(tensor_data(out)[4] == 2 && tensor_data(out)[5] == 4 && tensor_data(out)[6] == 6 &&
            tensor_data(out)[7] == 8);
 
-    // matmul with transposed input: (2, 3) @ (3, 2)
+    // matmul with transposed rhs: [2, 3] @ [2, 3]^T = [2, 3] @ [3, 2] -> [2, 2]
     lhs = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
     rhs = tensor_from((int[]){2, 3}, 2, (float[]){1, 1, 1, 2, 2, 2});
-    rhs = tensor_transpose(rhs, 0, 1);  // now (3, 2)
+    rhs = tensor_transpose(rhs, 0, 1);  // now [3, 2]
     out = tensor_matmul(lhs, rhs);
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 2 && tensor_shape(out)[1] == 2);
     ensure(tensor_data(out)[0] == 6 && tensor_data(out)[1] == 12 && tensor_data(out)[2] == 15 &&
            tensor_data(out)[3] == 30);
+
+    // matmul with transposed lhs: [3, 2]^T @ [3, 2] = [2, 3] @ [3, 2] -> [2, 2]
+    lhs = tensor_from((int[]){3, 2}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    lhs = tensor_transpose(lhs, 0, 1);  // now [2, 3]: [[1,3,5],[2,4,6]]
+    rhs = tensor_from((int[]){3, 2}, 2, (float[]){1, 0, 0, 1, 1, 0});
+    out = tensor_matmul(lhs, rhs);
+    ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 2 && tensor_shape(out)[1] == 2);
+    ensure(tensor_data(out)[0] == 6 && tensor_data(out)[1] == 3 && tensor_data(out)[2] == 8 &&
+           tensor_data(out)[3] == 4);
 
     tensor_frame_end();
 }
@@ -617,6 +644,7 @@ static void test_io(void)
 {
     tensor_frame_begin();
 
+    // save and load roundtrip: shape and values preserved
     Tensor *save = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
     tensor_save(save, "/tmp/tensor.npy");
 
