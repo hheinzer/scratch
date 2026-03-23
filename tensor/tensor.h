@@ -7,6 +7,14 @@ typedef struct tensor Tensor;
 void tensor_frame_begin(void);
 void tensor_frame_end(void);
 
+// access
+
+int tensor_ndim(const Tensor *self);
+long tensor_numel(const Tensor *self);
+const int *tensor_shape(const Tensor *self);
+const long *tensor_stride(const Tensor *self);
+float *tensor_data(const Tensor *self);
+
 // creation
 
 Tensor *tensor_empty(const int *shape, int ndim);

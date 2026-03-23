@@ -9,16 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { MAX_NDIM = 8 };
-
-struct tensor {
-    int ndim;
-    long numel;
-    int shape[MAX_NDIM];
-    long stride[MAX_NDIM];
-    float *data;
-};
-
 // memory
 
 enum { MAX_SAVE = 1024 };
@@ -85,6 +75,18 @@ static void stack_restore(void)
     }
 }
 
+// tensor
+
+enum { MAX_NDIM = 8 };
+
+struct tensor {
+    int ndim;
+    long numel;
+    int shape[MAX_NDIM];
+    long stride[MAX_NDIM];
+    float *data;
+};
+
 // context
 
 void tensor_frame_begin(void)
@@ -95,6 +97,38 @@ void tensor_frame_begin(void)
 void tensor_frame_end(void)
 {
     stack_restore();
+}
+
+// access
+
+int tensor_ndim(const Tensor *self)
+{
+    assert(self);
+    return self->ndim;
+}
+
+long tensor_numel(const Tensor *self)
+{
+    assert(self);
+    return self->numel;
+}
+
+const int *tensor_shape(const Tensor *self)
+{
+    assert(self);
+    return self->shape;
+}
+
+const long *tensor_stride(const Tensor *self)
+{
+    assert(self);
+    return self->stride;
+}
+
+float *tensor_data(const Tensor *self)
+{
+    assert(self);
+    return self->data;
 }
 
 // creation
