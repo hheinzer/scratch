@@ -1648,16 +1648,18 @@ Tensor *tensor_load(const char *fname)
     pos += 1;
     int shape[MAX_NDIM];
     int ndim = 0;
-    while (*pos != ')') {
+    while (*pos != ')' && *pos != '\0') {
         while (*pos == ' ' || *pos == ',') {
             pos++;
         }
         if (*pos >= '0' && *pos <= '9') {
+            assert(ndim < MAX_NDIM);
             long size = strtol(pos, &pos, 10);
             assert(size <= INT_MAX);
             shape[ndim++] = (int)size;
         }
     }
+    assert(*pos == ')');
 
     Tensor *out = tensor_empty(shape, ndim);
     fread(out->data, sizeof(float), out->numel, file);
