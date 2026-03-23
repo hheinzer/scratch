@@ -84,6 +84,7 @@ Tensor *tensor_logical_or(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_logical_xor(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_minimum(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_clamp(const Tensor *src, float min, float max);
 
 // reduction
 
@@ -107,6 +108,8 @@ void tensor_argmax(const Tensor *src, long *index, int axis);
 
 Tensor *tensor_softmax(const Tensor *src, int axis);
 Tensor *tensor_log_softmax(const Tensor *src, int axis);
+Tensor *tensor_cross_entropy(const Tensor *logits, const Tensor *target);
+Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);
 
 // i/o

@@ -1205,6 +1205,11 @@ Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs)
     return binary(lhs, rhs, binary_maximum);
 }
 
+Tensor *tensor_clamp(const Tensor *src, float min, float max)
+{
+    return tensor_maximum(tensor_minimum(src, tensor_fill(0, 0, max)), tensor_fill(0, 0, min));
+}
+
 // reduction
 
 typedef void Reduce(float *, const float *, long, long);
@@ -1489,6 +1494,33 @@ Tensor *tensor_log_softmax(const Tensor *src, int axis)
 {
     Tensor *sub = tensor_sub(src, tensor_max(src, axis, 1));
     return tensor_sub(sub, tensor_log(tensor_sum(tensor_exp(sub), axis, 1)));
+}
+
+Tensor *tensor_cross_entropy(const Tensor *logits, const Tensor *target)
+{
+    assert(logits && target && logits->ndim == 2 && target->ndim == 1);
+    assert(logits->shape[0] == target->shape[0]);
+    int numel = logits->shape[0];
+    Tensor *loss = tensor_empty((int[]){numel}, 1);
+    stack_save();
+    const Tensor *log_prob = tensor_log_softmax(logits, 1);
+    if (!is_contiguous(target)) {
+        target = tensor_contiguous(target);
+    }
+    for (int i = 0; i < numel; i++) {
+        int class = (int)target->data[i];
+        assert(class >= 0 && class < logits->shape[1]);
+        loss->data[i] = -log_prob->data[((long)i * log_prob->stride[0]) + class];
+    }
+    stack_restore();
+    return tensor_mean(loss, INT_MAX, 0);
+}
+
+Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs)
+{
+    assert(lhs && rhs && lhs->ndim == 1 && rhs->ndim == 1);
+    assert(lhs->shape[0] == rhs->shape[0]);
+    return tensor_sum(tensor_mul(lhs, rhs), INT_MAX, 0);
 }
 
 static const Tensor *matmul_prepare(const Tensor *src, long *stride, int *trans)

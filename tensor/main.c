@@ -432,6 +432,10 @@ static void test_binary(void)
     out = tensor_maximum(lhs, rhs);
     ensure(tensor_data(out)[0] == 4 && tensor_data(out)[1] == 5 && tensor_data(out)[2] == 3);
 
+    // tensor_clamp: [-2, 0, 3] clamped to [-1, 2] -> [-1, 0, 2]
+    out = tensor_clamp(tensor_from((int[]){3}, 1, (float[]){-2, 0, 3}), -1, 2);
+    ensure(tensor_data(out)[0] == -1 && tensor_data(out)[1] == 0 && tensor_data(out)[2] == 2);
+
     // broadcasting: [3] + [1] -> [3]
     lhs = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
     rhs = tensor_from((int[]){1}, 1, (float[]){10});
@@ -627,15 +631,27 @@ static void test_processing(void)
     ensure(isclose(tensor_data(out)[0], -2.4076059F) && isclose(tensor_data(out)[1], -1.4076059F) &&
            isclose(tensor_data(out)[2], -0.40760595F));
 
+    // cross_entropy: logits [[1,2,3],[1,2,3]], targets [2,0] -> mean(-lsm[0][2], -lsm[1][0])
+    src = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 1, 2, 3});
+    Tensor *tgt = tensor_from((int[]){2}, 1, (float[]){2, 0});
+    out = tensor_cross_entropy(src, tgt);
+    ensure(tensor_ndim(out) == 0 && isclose(tensor_data(out)[0], 1.4076059F));
+
     // softmax: 2D along axis 0
     src = tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4});
     out = tensor_softmax(src, 0);
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 2 && tensor_shape(out)[1] == 2);
     ensure(isclose(tensor_data(out)[0], 0.11920292F) && isclose(tensor_data(out)[2], 0.88079708F));
 
+    // tensor_dot: [1,2,3] · [4,5,6] = 32
+    Tensor *lhs = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
+    Tensor *rhs = tensor_from((int[]){3}, 1, (float[]){4, 5, 6});
+    out = tensor_dot(lhs, rhs);
+    ensure(tensor_ndim(out) == 0 && tensor_data(out)[0] == 32);
+
     // matmul: general rectangular [2, 3] @ [3, 2] -> [2, 2]
-    Tensor *lhs = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
-    Tensor *rhs = tensor_from((int[]){3, 2}, 2, (float[]){7, 8, 9, 10, 11, 12});
+    lhs = tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6});
+    rhs = tensor_from((int[]){3, 2}, 2, (float[]){7, 8, 9, 10, 11, 12});
     out = tensor_matmul(lhs, rhs);
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 2 && tensor_shape(out)[1] == 2);
     ensure(tensor_data(out)[0] == 58 && tensor_data(out)[1] == 64 && tensor_data(out)[2] == 139 &&
