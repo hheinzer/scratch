@@ -2,7 +2,7 @@
 
 typedef struct tensor Tensor;
 
-// context
+// context — tensors are stack-allocated; all tensors in a frame are freed at `tensor_frame_end`
 
 void tensor_frame_begin(void);
 void tensor_frame_end(void);
@@ -21,28 +21,30 @@ Tensor *tensor_empty(const int *shape, int ndim);
 Tensor *tensor_zeros(const int *shape, int ndim);
 Tensor *tensor_ones(const int *shape, int ndim);
 Tensor *tensor_fill(const int *shape, int ndim, float value);
-Tensor *tensor_range(float start, float stop, float step);
-Tensor *tensor_arange(float start, float stop, float step);
+Tensor *tensor_arange(float start, float stop, float step);  // [start, stop)
+Tensor *tensor_range(float start, float stop, float step);   // [start, stop]
 Tensor *tensor_linspace(float start, float stop, int steps);
 Tensor *tensor_logspace(float base, float start, float stop, int steps);
 Tensor *tensor_eye(int rows, int cols);
-Tensor *tensor_from(const int *shape, int ndim, const float *data);
+Tensor *tensor_from(const int *shape, int ndim, const float *data);  // copies data
 Tensor *tensor_rand(const int *shape, int ndim);
 Tensor *tensor_randn(const int *shape, int ndim);
 
-// movement
+// movement — return views where possible; call `tensor_contiguous` to force a copy
 
-Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim);
+Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim);  // use `-1` to infer one dim
+// `INT_MIN`/`INT_MAX` flatten all dims
 Tensor *tensor_flatten(const Tensor *src, int beg_dim, int end_dim);
 Tensor *tensor_unflatten(const Tensor *src, int dim, const int *size, int num);
-Tensor *tensor_squeeze(const Tensor *src, int dim);
+Tensor *tensor_squeeze(const Tensor *src, int dim);  // `INT_MAX` removes all size-1 dims
 Tensor *tensor_unsqueeze(const Tensor *src, int dim);
 Tensor *tensor_permute(const Tensor *src, const int *order);
 Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1);
 Tensor *tensor_flip(const Tensor *src, int dim);
+// negative indices and step supported
 Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step);
 Tensor *tensor_select(const Tensor *src, int dim, int index);
-Tensor *tensor_expand(const Tensor *src, const int *shape, int ndim);
+Tensor *tensor_expand(const Tensor *src, const int *shape, int ndim);  // `-1` preserves dim
 Tensor *tensor_cat(const Tensor **src, int num, int dim);
 Tensor *tensor_stack(const Tensor **src, int num, int dim);
 Tensor *tensor_contiguous(const Tensor *src);
@@ -54,7 +56,7 @@ Tensor *tensor_abs(const Tensor *src);
 Tensor *tensor_sign(const Tensor *src);
 Tensor *tensor_square(const Tensor *src);
 Tensor *tensor_sqrt(const Tensor *src);
-Tensor *tensor_rsqrt(const Tensor *src);
+Tensor *tensor_rsqrt(const Tensor *src);  // 1/sqrt(x)
 Tensor *tensor_exp(const Tensor *src);
 Tensor *tensor_sin(const Tensor *src);
 Tensor *tensor_cos(const Tensor *src);
@@ -62,19 +64,19 @@ Tensor *tensor_tan(const Tensor *src);
 Tensor *tensor_log(const Tensor *src);
 Tensor *tensor_floor(const Tensor *src);
 Tensor *tensor_ceil(const Tensor *src);
-Tensor *tensor_round(const Tensor *src);
+Tensor *tensor_round(const Tensor *src);  // half away from zero
 Tensor *tensor_relu(const Tensor *src);
 Tensor *tensor_sigmoid(const Tensor *src);
 Tensor *tensor_tanh(const Tensor *src);
 Tensor *tensor_logical_not(const Tensor *src);
 
-// binary
+// binary — all functions support broadcasting
 
 Tensor *tensor_add(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_sub(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_mul(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_div(const Tensor *lhs, const Tensor *rhs);
-Tensor *tensor_mod(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_mod(const Tensor *lhs, const Tensor *rhs);  // sign follows `rhs`
 Tensor *tensor_pow(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_eq(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_ne(const Tensor *lhs, const Tensor *rhs);
@@ -89,7 +91,7 @@ Tensor *tensor_minimum(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_clamp(const Tensor *src, float min, float max);
 
-// reduction
+// reduction — `axis=INT_MAX` reduces all dims to a scalar; `keepdim` retains the axis as size 1
 
 Tensor *tensor_min(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_max(const Tensor *src, int axis, int keepdim);
@@ -98,11 +100,11 @@ Tensor *tensor_prod(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_all(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_any(const Tensor *src, int axis, int keepdim);
 Tensor *tensor_mean(const Tensor *src, int axis, int keepdim);
-Tensor *tensor_var(const Tensor *src, int axis, int keepdim);
-Tensor *tensor_std(const Tensor *src, int axis, int keepdim);
-Tensor *tensor_norm(const Tensor *src, int axis, int keepdim);
+Tensor *tensor_var(const Tensor *src, int axis, int keepdim);   // population variance
+Tensor *tensor_std(const Tensor *src, int axis, int keepdim);   // population std
+Tensor *tensor_norm(const Tensor *src, int axis, int keepdim);  // L2 norm
 
-// argreduction
+// argreduction — writes into caller-provided array; `axis=INT_MAX` gives index into flat array
 
 void tensor_argmin(const Tensor *src, long *index, int axis);
 void tensor_argmax(const Tensor *src, long *index, int axis);
@@ -111,11 +113,13 @@ void tensor_argmax(const Tensor *src, long *index, int axis);
 
 Tensor *tensor_softmax(const Tensor *src, int axis);
 Tensor *tensor_log_softmax(const Tensor *src, int axis);
+// `input`: unnormalized logits; `target`: integer class indices stored as float
 Tensor *tensor_cross_entropy(const Tensor *input, const Tensor *target);
-Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs);
+Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs);  // 1D inner product
+// supports batched matmul with broadcasting
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);
 
-// i/o
+// i/o — `tensor_save` and `tensor_load` use numpy ".npy" format
 
 void tensor_print(const Tensor *self);
 void tensor_save(const Tensor *self, const char *fname);
