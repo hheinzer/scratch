@@ -79,12 +79,22 @@ static void stack_restore(void)
 
 enum { MAX_NDIM = 8 };
 
+typedef struct {
+    int num_inputs;
+    Tensor *input[3];
+    Tensor *saved[3];
+    void (*backward)(Tensor *);
+} Autograd;
+
 struct tensor {
+    int requires_grad;
     int ndim;
     long numel;
     int shape[MAX_NDIM];
     long stride[MAX_NDIM];
     float *data;
+    float *grad;
+    Autograd *ctx;
 };
 
 // context
@@ -1804,6 +1814,81 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
 
     stack_restore();
     return out;
+}
+
+// autograd
+
+Tensor *tensor_requires_grad(Tensor *self)
+{
+    assert(self);
+    self->requires_grad = 1;
+    return self;
+}
+
+Tensor *tensor_grad(const Tensor *self)
+{
+    assert(self && self->grad);
+    return tensor_wrap(self->shape, self->ndim, self->grad);
+}
+
+enum { MAX_TOPO = 1024 };
+
+static void build_topo(Tensor *self, Tensor **topo, int *count)
+{
+    if (!self) {
+        return;
+    }
+    for (int i = 0; i < *count; i++) {
+        if (topo[i] == self) {
+            return;
+        }
+    }
+    if (self->ctx) {
+        for (int i = 0; i < self->ctx->num_inputs; i++) {
+            build_topo(self->ctx->input[i], topo, count);
+        }
+    }
+    assert(*count < MAX_TOPO);
+    topo[(*count)++] = self;
+}
+
+void tensor_backward(Tensor *self, const Tensor *grad)
+{
+    assert(self);
+
+    if (!self->grad) {
+        self->grad = stack_calloc(self->numel, sizeof(*self->grad));
+    }
+
+    if (grad) {
+        assert(grad->numel == self->numel);
+        for (long i = 0; i < self->numel; i++) {
+            self->grad[i] += grad->data[i];
+        }
+    }
+    else {
+        for (long i = 0; i < self->numel; i++) {
+            self->grad[i] += 1;
+        }
+    }
+
+    Tensor *topo[MAX_TOPO];
+    int count = 0;
+    build_topo(self, topo, &count);
+
+    for (int i = count - 1; i >= 0; i--) {
+        if (topo[i]->ctx && topo[i]->ctx->backward) {
+            topo[i]->ctx->backward(topo[i]);
+        }
+    }
+}
+
+void tensor_zero_grad(Tensor *self)
+{
+    assert(self);
+    if (self->grad) {
+        memset(self->grad, 0, self->numel * sizeof(*self->grad));
+    }
 }
 
 // i/o

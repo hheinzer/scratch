@@ -123,6 +123,13 @@ Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *target);  // unn
 Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs);                 // 1D inner product
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);  // supports batched with broadcasting
 
+// autograd
+
+Tensor *tensor_requires_grad(Tensor *self);
+Tensor *tensor_grad(const Tensor *self);
+void tensor_backward(Tensor *self, const Tensor *grad);  // pass 0 for grad when loss is scalar
+void tensor_zero_grad(Tensor *self);
+
 // i/o: tensor_save and tensor_load use numpy NPY format
 
 void tensor_print(const Tensor *self);
