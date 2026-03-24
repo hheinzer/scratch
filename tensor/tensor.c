@@ -1222,9 +1222,52 @@ static Tensor *binary(const Tensor *lhs, const Tensor *rhs, Binary *func)
     return out;
 }
 
+static void accumulate_grad(Tensor *self, const Tensor *grad)
+{
+    if (!self->grad) {
+        self->grad = stack_calloc(self->numel, sizeof(*self->grad));
+    }
+    stack_save();
+    int offset = grad->ndim - self->ndim;
+    for (int i = 0; i < offset; i++) {
+        grad = tensor_sum(grad, 0, 1);
+    }
+    for (int i = 0; i < self->ndim; i++) {
+        if (self->shape[i] == 1) {
+            grad = tensor_sum(grad, i, 1);
+        }
+    }
+    for (long i = 0; i < self->numel; i++) {
+        self->grad[i] += grad->data[i];
+    }
+    stack_restore();
+}
+
+static void add_backward(Tensor *out)
+{
+    Tensor *lhs = out->ctx->input[0];
+    Tensor *rhs = out->ctx->input[1];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (lhs->requires_grad) {
+        accumulate_grad(lhs, grad);
+    }
+    if (rhs->requires_grad) {
+        accumulate_grad(rhs, grad);
+    }
+}
+
 Tensor *tensor_add(const Tensor *lhs, const Tensor *rhs)
 {
-    return binary(lhs, rhs, binary_add);
+    Tensor *out = binary(lhs, rhs, binary_add);
+    if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 2;
+        out->ctx->input[0] = (Tensor *)lhs;
+        out->ctx->input[1] = (Tensor *)rhs;
+        out->ctx->backward = add_backward;
+    }
+    return out;
 }
 
 Tensor *tensor_sub(const Tensor *lhs, const Tensor *rhs)

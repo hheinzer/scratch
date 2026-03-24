@@ -768,6 +768,49 @@ static void test_processing(void)
     tensor_frame_end();
 }
 
+static void test_autograd(void)
+{
+    tensor_frame_begin();
+
+    // tensor_add: grad flows to both inputs
+    Tensor *lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
+    Tensor *rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 5, 6}));
+    Tensor *out = tensor_add(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[1] == 1 &&
+           tensor_data(tensor_grad(lhs))[2] == 1);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 1 && tensor_data(tensor_grad(rhs))[1] == 1 &&
+           tensor_data(tensor_grad(rhs))[2] == 1);
+
+    // tensor_add: grad does not appear on input without requires_grad
+    lhs = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
+    rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 5, 6}));
+    out = tensor_add(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(tensor_grad(lhs) == 0);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 1 && tensor_data(tensor_grad(rhs))[2] == 1);
+
+    // tensor_add: gradient accumulation; backward on same graph twice accumulates into leaf grads
+    lhs = tensor_requires_grad(tensor_from((int[]){2}, 1, (float[]){1, 2}));
+    rhs = tensor_requires_grad(tensor_from((int[]){2}, 1, (float[]){3, 4}));
+    out = tensor_add(lhs, rhs);
+    tensor_backward(out, 0);  // lhs->grad = 1, rhs->grad = 1; out->grad = 1
+    tensor_backward(out, 0);  // lhs->grad = 2, rhs->grad = 2; out->grad = 1
+    ensure(tensor_data(tensor_grad(lhs))[0] == 2 && tensor_data(tensor_grad(lhs))[1] == 2);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 2 && tensor_data(tensor_grad(rhs))[1] == 2);
+
+    // tensor_add: broadcasting [2, 3] + [3] -> rhs grad summed along axis 0
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
+    out = tensor_add(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[5] == 1);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 2 && tensor_data(tensor_grad(rhs))[1] == 2 &&
+           tensor_data(tensor_grad(rhs))[2] == 2);
+
+    tensor_frame_end();
+}
+
 static void test_io(void)
 {
     tensor_frame_begin();
@@ -828,5 +871,6 @@ int main(void)
     test_reduction();
     test_argreduction();
     test_processing();
+    test_autograd();
     test_io();
 }
