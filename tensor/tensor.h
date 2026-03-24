@@ -136,5 +136,6 @@ void tensor_zero_grad(Tensor *self);
 // i/o: tensor_save and tensor_load use numpy NPY format
 
 void tensor_print(const Tensor *self);
+void tensor_print_backward(const Tensor *self);
 void tensor_save(const Tensor *self, const char *fname);
 Tensor *tensor_load(const char *fname);
