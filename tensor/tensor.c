@@ -1270,14 +1270,58 @@ Tensor *tensor_add(const Tensor *lhs, const Tensor *rhs)
     return out;
 }
 
+static void sub_backward(Tensor *out)
+{
+    Tensor *lhs = out->ctx->input[0];
+    Tensor *rhs = out->ctx->input[1];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (lhs->requires_grad) {
+        accumulate_grad(lhs, grad);
+    }
+    if (rhs->requires_grad) {
+        accumulate_grad(rhs, tensor_neg(grad));
+    }
+}
+
 Tensor *tensor_sub(const Tensor *lhs, const Tensor *rhs)
 {
-    return binary(lhs, rhs, binary_sub);
+    Tensor *out = binary(lhs, rhs, binary_sub);
+    if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 2;
+        out->ctx->input[0] = (Tensor *)lhs;
+        out->ctx->input[1] = (Tensor *)rhs;
+        out->ctx->backward = sub_backward;
+    }
+    return out;
+}
+
+static void mul_backward(Tensor *out)
+{
+    Tensor *lhs = out->ctx->input[0];
+    Tensor *rhs = out->ctx->input[1];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (lhs->requires_grad) {
+        accumulate_grad(lhs, tensor_mul(grad, rhs));
+    }
+    if (rhs->requires_grad) {
+        accumulate_grad(rhs, tensor_mul(lhs, grad));
+    }
 }
 
 Tensor *tensor_mul(const Tensor *lhs, const Tensor *rhs)
 {
-    return binary(lhs, rhs, binary_mul);
+    Tensor *out = binary(lhs, rhs, binary_mul);
+    if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 2;
+        out->ctx->input[0] = (Tensor *)lhs;
+        out->ctx->input[1] = (Tensor *)rhs;
+        out->ctx->backward = mul_backward;
+    }
+    return out;
 }
 
 Tensor *tensor_div(const Tensor *lhs, const Tensor *rhs)
@@ -1938,11 +1982,16 @@ void tensor_backward(Tensor *self, const Tensor *grad)
     int count = 0;
     build_topo(self, topo, &count);
 
+    int grad_enabled = g_grad_enabled;
+    g_grad_enabled = 0;
+
     for (int i = count - 1; i >= 0; i--) {
         if (topo[i]->ctx && topo[i]->ctx->backward) {
             topo[i]->ctx->backward(topo[i]);
         }
     }
+
+    g_grad_enabled = grad_enabled;
 }
 
 void tensor_zero_grad(Tensor *self)

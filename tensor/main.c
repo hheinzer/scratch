@@ -808,6 +808,24 @@ static void test_autograd(void)
     ensure(tensor_data(tensor_grad(rhs))[0] == 2 && tensor_data(tensor_grad(rhs))[1] == 2 &&
            tensor_data(tensor_grad(rhs))[2] == 2);
 
+    // tensor_sub: lhs grad is +1, rhs grad is -1
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
+    rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 5, 6}));
+    out = tensor_sub(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[2] == 1);
+    ensure(tensor_data(tensor_grad(rhs))[0] == -1 && tensor_data(tensor_grad(rhs))[2] == -1);
+
+    // tensor_mul: lhs grad is out->grad * rhs, rhs grad is out->grad * lhs
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){2, 3, 4}));
+    rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){5, 6, 7}));
+    out = tensor_mul(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 5 && tensor_data(tensor_grad(lhs))[1] == 6 &&
+           tensor_data(tensor_grad(lhs))[2] == 7);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 2 && tensor_data(tensor_grad(rhs))[1] == 3 &&
+           tensor_data(tensor_grad(rhs))[2] == 4);
+
     tensor_frame_end();
 }
 
