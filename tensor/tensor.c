@@ -1328,31 +1328,6 @@ static void reduce_any(float *out, const float *src, long stride_src, long num)
     }
 }
 
-static void reduce_var(float *out, const float *src, long stride_src, long num)
-{
-    float mean = 0;
-    for (long i = 0; i < num; i++) {
-        mean += src[i * stride_src];
-    }
-    mean /= (float)num;
-    float acc = 0;
-    for (long i = 0; i < num; i++) {
-        float dev = src[i * stride_src] - mean;
-        acc += dev * dev;
-    }
-    *out = acc / (float)num;
-}
-
-static void reduce_sum_of_squares(float *out, const float *src, long stride_src, long num)
-{
-    float acc = 0;
-    for (long i = 0; i < num; i++) {
-        float val = src[i * stride_src];
-        acc += val * val;
-    }
-    *out = acc;
-}
-
 static void apply_reduce(Tensor *out, long offset_out, const Tensor *src, long offset_src, int dim,
                          Reduce *func, int axis)
 {
@@ -1453,25 +1428,17 @@ Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
 
 Tensor *tensor_var(const Tensor *src, int axis, int keepdim)
 {
-    return reduce(src, axis, keepdim, reduce_var);
+    return tensor_mean(tensor_square(tensor_sub(src, tensor_mean(src, axis, 1))), axis, keepdim);
 }
 
 Tensor *tensor_std(const Tensor *src, int axis, int keepdim)
 {
-    Tensor *out = reduce(src, axis, keepdim, reduce_var);
-    for (long i = 0; i < out->numel; i++) {
-        out->data[i] = sqrtf(out->data[i]);
-    }
-    return out;
+    return tensor_sqrt(tensor_var(src, axis, keepdim));
 }
 
 Tensor *tensor_norm(const Tensor *src, int axis, int keepdim)
 {
-    Tensor *out = reduce(src, axis, keepdim, reduce_sum_of_squares);
-    for (long i = 0; i < out->numel; i++) {
-        out->data[i] = sqrtf(out->data[i]);
-    }
-    return out;
+    return tensor_sqrt(tensor_sum(tensor_square(src), axis, keepdim));
 }
 
 // argreduction
@@ -1579,20 +1546,20 @@ Tensor *tensor_log_softmax(const Tensor *src, int axis)
     return tensor_sub(sub, tensor_log(tensor_sum(tensor_exp(sub), axis, 1)));
 }
 
-Tensor *tensor_cross_entropy(const Tensor *input, const Tensor *target)
+Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *target)
 {
-    assert(input && target && input->ndim == 2 && target->ndim == 1);
-    assert(input->shape[0] == target->shape[0]);
-    int numel = input->shape[0];
+    assert(logit && target && logit->ndim == 2 && target->ndim == 1);
+    assert(logit->shape[0] == target->shape[0]);
+    int numel = logit->shape[0];
     Tensor *loss = tensor_empty((int[]){numel}, 1);
     stack_save();
-    const Tensor *lsm = tensor_log_softmax(input, 1);
+    const Tensor *lsm = tensor_log_softmax(logit, 1);
     if (!is_contiguous(target)) {
         target = tensor_contiguous(target);
     }
     for (int i = 0; i < numel; i++) {
         int class = (int)target->data[i];
-        assert(class >= 0 && class < input->shape[1]);
+        assert(class >= 0 && class < logit->shape[1]);
         loss->data[i] = -lsm->data[((long)i * lsm->stride[0]) + class];
     }
     stack_restore();
