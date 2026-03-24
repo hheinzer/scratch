@@ -6,6 +6,8 @@ typedef struct tensor Tensor;
 
 void tensor_frame_begin(void);
 void tensor_frame_end(void);
+void tensor_no_grad_begin(void);
+void tensor_no_grad_end(void);
 
 // access
 
@@ -49,6 +51,7 @@ Tensor *tensor_cat(const Tensor **src, int num, int dim);
 Tensor *tensor_stack(const Tensor **src, int num, int dim);
 Tensor *tensor_contiguous(const Tensor *src);  // force a copy
 Tensor *tensor_clone(const Tensor *src);
+Tensor *tensor_detach(const Tensor *src);
 
 // unary
 

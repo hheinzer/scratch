@@ -109,6 +109,18 @@ void tensor_frame_end(void)
     stack_restore();
 }
 
+static int g_grad_enabled = 1;
+
+void tensor_no_grad_begin(void)
+{
+    g_grad_enabled = 0;
+}
+
+void tensor_no_grad_end(void)
+{
+    g_grad_enabled = 1;
+}
+
 // access
 
 int tensor_ndim(const Tensor *self)
@@ -757,6 +769,16 @@ Tensor *tensor_clone(const Tensor *src)
         long offset = 0;
         pack_data(out, &offset, src, 0, 0);
     }
+    return out;
+}
+
+Tensor *tensor_detach(const Tensor *src)
+{
+    assert(src);
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    out->requires_grad = 0;
+    out->grad = 0;
+    out->ctx = 0;
     return out;
 }
 
