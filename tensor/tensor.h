@@ -27,6 +27,7 @@ Tensor *tensor_linspace(float start, float stop, int steps);
 Tensor *tensor_logspace(float base, float start, float stop, int steps);
 Tensor *tensor_eye(int rows, int cols);
 Tensor *tensor_from(const int *shape, int ndim, const float *data);  // copies data
+Tensor *tensor_scalar(float value);
 Tensor *tensor_rand(const int *shape, int ndim);
 Tensor *tensor_randn(const int *shape, int ndim);
 
@@ -88,7 +89,12 @@ Tensor *tensor_logical_or(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_logical_xor(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_minimum(const Tensor *lhs, const Tensor *rhs);
 Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs);
-Tensor *tensor_clamp(const Tensor *src, float min, float max);
+
+// ternary: all functions support broadcasting
+
+Tensor *tensor_where(const Tensor *cond, const Tensor *if_true, const Tensor *if_false);
+Tensor *tensor_lerp(const Tensor *start, const Tensor *stop, const Tensor *weight);
+Tensor *tensor_clamp(const Tensor *src, const Tensor *min, const Tensor *max);
 
 // reduction: axis=INT_MAX reduces all dims to a scalar; keepdim retains the axis as size 1
 

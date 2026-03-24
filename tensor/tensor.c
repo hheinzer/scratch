@@ -287,6 +287,11 @@ Tensor *tensor_from(const int *shape, int ndim, const float *data)
     return out;
 }
 
+Tensor *tensor_scalar(float value)
+{
+    return tensor_from(0, 0, &value);
+}
+
 static float random_uniform(void)
 {
     return (float)rand() / (float)RAND_MAX;
@@ -1123,16 +1128,17 @@ static void binary_maximum(float *out, const float *lhs, long stride_lhs, const 
     }
 }
 
-static int broadcast_shape(int *shape, const Tensor *lhs, const Tensor *rhs)
+static int broadcast_binary(int *shape, const Tensor *lhs, const Tensor *rhs)
 {
     int ndim = (lhs->ndim > rhs->ndim) ? lhs->ndim : rhs->ndim;
-    int offset_lhs = ndim - lhs->ndim;
-    int offset_rhs = ndim - rhs->ndim;
     for (int i = 0; i < ndim; i++) {
-        int dim_lhs = (i >= offset_lhs) ? lhs->shape[i - offset_lhs] : 1;
-        int dim_rhs = (i >= offset_rhs) ? rhs->shape[i - offset_rhs] : 1;
-        assert(dim_lhs == dim_rhs || dim_lhs == 1 || dim_rhs == 1);
-        shape[i] = (dim_lhs > dim_rhs) ? dim_lhs : dim_rhs;
+        int dim_lhs = i - (ndim - lhs->ndim);
+        int dim_rhs = i - (ndim - rhs->ndim);
+        int size_lhs = (dim_lhs >= 0) ? lhs->shape[dim_lhs] : 1;
+        int size_rhs = (dim_rhs >= 0) ? rhs->shape[dim_rhs] : 1;
+        int size = (size_lhs > size_rhs) ? size_lhs : size_rhs;
+        assert((size_lhs == size || size_lhs == 1) && (size_rhs == size || size_rhs == 1));
+        shape[i] = size;
     }
     return ndim;
 }
@@ -1157,7 +1163,7 @@ static Tensor *binary(const Tensor *lhs, const Tensor *rhs, Binary *func)
 {
     assert(lhs && rhs && func);
     int shape[MAX_NDIM];
-    int ndim = broadcast_shape(shape, lhs, rhs);
+    int ndim = broadcast_binary(shape, lhs, rhs);
     lhs = tensor_expand(lhs, shape, ndim);
     rhs = tensor_expand(rhs, shape, ndim);
     Tensor *out = tensor_empty(shape, ndim);
@@ -1255,9 +1261,117 @@ Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs)
     return binary(lhs, rhs, binary_maximum);
 }
 
-Tensor *tensor_clamp(const Tensor *src, float min, float max)
+// ternary
+
+typedef void Ternary(float *, const float *, long, const float *, long, const float *, long, int);
+
+static void ternary_where(float *out, const float *lhs, long stride_lhs, const float *mid,
+                          long stride_mid, const float *rhs, long stride_rhs, int num)
 {
-    return tensor_maximum(tensor_minimum(src, tensor_fill(0, 0, max)), tensor_fill(0, 0, min));
+    for (int i = 0; i < num; i++) {
+        float cond = lhs[i * stride_lhs];
+        float if_true = mid[i * stride_mid];
+        float if_false = rhs[i * stride_rhs];
+        out[i] = (cond != 0) ? if_true : if_false;
+    }
+}
+
+static void ternary_lerp(float *out, const float *lhs, long stride_lhs, const float *mid,
+                         long stride_mid, const float *rhs, long stride_rhs, int num)
+{
+    for (int i = 0; i < num; i++) {
+        float start = lhs[i * stride_lhs];
+        float stop = mid[i * stride_mid];
+        float weight = rhs[i * stride_rhs];
+        out[i] = start + (weight * (stop - start));
+    }
+}
+
+static void ternary_clamp(float *out, const float *lhs, long stride_lhs, const float *mid,
+                          long stride_mid, const float *rhs, long stride_rhs, int num)
+{
+    for (int i = 0; i < num; i++) {
+        float src = lhs[i * stride_lhs];
+        float min = mid[i * stride_mid];
+        float max = rhs[i * stride_rhs];
+        out[i] = fmaxf(min, fminf(max, src));
+    }
+}
+
+static int broadcast_ternary(int *shape, const Tensor *lhs, const Tensor *mid, const Tensor *rhs)
+{
+    int ndim = (lhs->ndim > rhs->ndim) ? lhs->ndim : rhs->ndim;
+    if (mid->ndim > ndim) {
+        ndim = mid->ndim;
+    }
+    for (int i = 0; i < ndim; i++) {
+        int dim_lhs = i - (ndim - lhs->ndim);
+        int dim_mid = i - (ndim - mid->ndim);
+        int dim_rhs = i - (ndim - rhs->ndim);
+        int size_lhs = (dim_lhs >= 0) ? lhs->shape[dim_lhs] : 1;
+        int size_mid = (dim_mid >= 0) ? mid->shape[dim_mid] : 1;
+        int size_rhs = (dim_rhs >= 0) ? rhs->shape[dim_rhs] : 1;
+        int size = (size_lhs > size_rhs) ? size_lhs : size_rhs;
+        if (size_mid > size) {
+            size = size_mid;
+        }
+        assert((size_lhs == size || size_lhs == 1) && (size_mid == size || size_mid == 1) &&
+               (size_rhs == size || size_rhs == 1));
+        shape[i] = size;
+    }
+    return ndim;
+}
+
+static void apply_ternary(Tensor *out, long offset_out, const Tensor *lhs, long offset_lhs,
+                          const Tensor *mid, long offset_mid, const Tensor *rhs, long offset_rhs,
+                          int dim, Ternary *func)
+{
+    if (dim == out->ndim - 1) {
+        func(out->data + offset_out, lhs->data + offset_lhs, lhs->stride[dim],
+             mid->data + offset_mid, mid->stride[dim], rhs->data + offset_rhs, rhs->stride[dim],
+             out->shape[dim]);
+    }
+    else {
+        for (int i = 0; i < out->shape[dim]; i++) {
+            apply_ternary(out, offset_out + (i * out->stride[dim]), lhs,
+                          offset_lhs + (i * lhs->stride[dim]), mid,
+                          offset_mid + (i * mid->stride[dim]), rhs,
+                          offset_rhs + (i * rhs->stride[dim]), dim + 1, func);
+        }
+    }
+}
+
+static Tensor *ternary(const Tensor *lhs, const Tensor *mid, const Tensor *rhs, Ternary *func)
+{
+    assert(lhs && mid && rhs && func);
+    int shape[MAX_NDIM];
+    int ndim = broadcast_ternary(shape, lhs, mid, rhs);
+    lhs = tensor_expand(lhs, shape, ndim);
+    mid = tensor_expand(mid, shape, ndim);
+    rhs = tensor_expand(rhs, shape, ndim);
+    Tensor *out = tensor_empty(shape, ndim);
+    if (ndim == 0) {
+        func(out->data, lhs->data, 0, mid->data, 0, rhs->data, 0, 1);
+    }
+    else {
+        apply_ternary(out, 0, lhs, 0, mid, 0, rhs, 0, 0, func);
+    }
+    return out;
+}
+
+Tensor *tensor_where(const Tensor *cond, const Tensor *if_true, const Tensor *if_false)
+{
+    return ternary(cond, if_true, if_false, ternary_where);
+}
+
+Tensor *tensor_lerp(const Tensor *start, const Tensor *stop, const Tensor *weight)
+{
+    return ternary(start, stop, weight, ternary_lerp);
+}
+
+Tensor *tensor_clamp(const Tensor *src, const Tensor *min, const Tensor *max)
+{
+    return ternary(src, min, max, ternary_clamp);
 }
 
 // reduction
@@ -1570,13 +1684,11 @@ Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs)
 {
     assert(lhs && rhs && lhs->ndim == 1 && rhs->ndim == 1);
     assert(lhs->shape[0] == rhs->shape[0]);
-    Tensor *out = tensor_empty(0, 0);
     float sum = 0;
     for (int i = 0; i < lhs->shape[0]; i++) {
         sum += lhs->data[i * lhs->stride[0]] * rhs->data[i * rhs->stride[0]];
     }
-    out->data[0] = sum;
-    return out;
+    return tensor_scalar(sum);
 }
 
 static const Tensor *matmul_prepare(const Tensor *src, long *stride, int *trans)

@@ -55,6 +55,10 @@ static void test_creation(void)
     data[0] = 99;
     ensure(tensor_data(tensor)[0] == 1);  // copy, not a reference
 
+    // tensor_scalar
+    tensor = tensor_scalar(7);
+    ensure(tensor_ndim(tensor) == 0 && tensor_data(tensor)[0] == 7);
+
     // tensor_range: [1, 3] -> [1, 2, 3]
     tensor = tensor_range(1, 3, 1);
     ensure(tensor_numel(tensor) == 3);
@@ -457,10 +461,6 @@ static void test_binary(void)
     out = tensor_maximum(lhs, rhs);
     ensure(tensor_data(out)[0] == 4 && tensor_data(out)[1] == 5 && tensor_data(out)[2] == 3);
 
-    // tensor_clamp: [-2, 0, 3] clamped to [-1, 2] -> [-1, 0, 2]
-    out = tensor_clamp(tensor_from((int[]){3}, 1, (float[]){-2, 0, 3}), -1, 2);
-    ensure(tensor_data(out)[0] == -1 && tensor_data(out)[1] == 0 && tensor_data(out)[2] == 2);
-
     // broadcasting: [3] + [1] -> [3]
     lhs = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
     rhs = tensor_from((int[]){1}, 1, (float[]){10});
@@ -472,6 +472,32 @@ static void test_binary(void)
     rhs = tensor_from((int[]){3}, 1, (float[]){10, 20, 30});
     out = tensor_add(lhs, rhs);
     ensure(tensor_data(out)[0] == 11 && tensor_data(out)[3] == 14 && tensor_data(out)[5] == 36);
+
+    tensor_frame_end();
+}
+
+static void test_ternary(void)
+{
+    tensor_frame_begin();
+
+    // tensor_where: [1,0,1] ? [10,20,30] : [40,50,60] -> [10,50,30]
+    Tensor *cond = tensor_from((int[]){3}, 1, (float[]){1, 0, 1});
+    Tensor *lhs = tensor_from((int[]){3}, 1, (float[]){10, 20, 30});
+    Tensor *rhs = tensor_from((int[]){3}, 1, (float[]){40, 50, 60});
+    Tensor *out = tensor_where(cond, lhs, rhs);
+    ensure(tensor_data(out)[0] == 10 && tensor_data(out)[1] == 50 && tensor_data(out)[2] == 30);
+
+    // tensor_lerp: start=[0,0], stop=[10,20], weight=[0.5,0.25] -> [5,5]
+    lhs = tensor_from((int[]){2}, 1, (float[]){0, 0});
+    rhs = tensor_from((int[]){2}, 1, (float[]){10, 20});
+    cond = tensor_from((int[]){2}, 1, (float[]){0.5F, 0.25F});
+    out = tensor_lerp(lhs, rhs, cond);
+    ensure(tensor_data(out)[0] == 5 && tensor_data(out)[1] == 5);
+
+    // tensor_clamp: [-2,0,3] clamped to [-1, 2] -> [-1,0,2]
+    lhs = tensor_from((int[]){3}, 1, (float[]){-2, 0, 3});
+    out = tensor_clamp(lhs, tensor_scalar(-1), tensor_scalar(2));
+    ensure(tensor_data(out)[0] == -1 && tensor_data(out)[1] == 0 && tensor_data(out)[2] == 2);
 
     tensor_frame_end();
 }
@@ -768,7 +794,7 @@ static void test_io(void)
     ensure(tensor_data(load)[0] == 4 && tensor_data(load)[1] == 5 && tensor_data(load)[5] == 9);
 
     // 0D tensor (scalar)
-    save = tensor_from(0, 0, (float[]){42});
+    save = tensor_scalar(42);
     tensor_save(save, "/tmp/scalar.npy");
 
     load = tensor_load("/tmp/scalar.npy");
@@ -791,6 +817,7 @@ int main(void)
     test_movement();
     test_unary();
     test_binary();
+    test_ternary();
     test_reduction();
     test_argreduction();
     test_processing();
