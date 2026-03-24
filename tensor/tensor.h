@@ -129,7 +129,7 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);  // supports batche
 // autograd
 
 Tensor *tensor_requires_grad(Tensor *self);
-Tensor *tensor_grad(const Tensor *self);
+Tensor *tensor_grad(const Tensor *self);                 // returns 0 if no grad
 void tensor_backward(Tensor *self, const Tensor *grad);  // pass 0 for grad when loss is scalar
 void tensor_zero_grad(Tensor *self);
 

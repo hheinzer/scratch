@@ -763,7 +763,7 @@ Tensor *tensor_clone(const Tensor *src)
     assert(src);
     Tensor *out = tensor_empty(src->shape, src->ndim);
     if (is_contiguous(src)) {
-        memcpy(out->data, src->data, (size_t)src->numel * sizeof(*src->data));
+        memcpy(out->data, src->data, src->numel * sizeof(*src->data));
     }
     else {
         long offset = 0;
@@ -1849,8 +1849,8 @@ Tensor *tensor_requires_grad(Tensor *self)
 
 Tensor *tensor_grad(const Tensor *self)
 {
-    assert(self && self->grad);
-    return tensor_wrap(self->shape, self->ndim, self->grad);
+    assert(self);
+    return self->grad ? tensor_wrap(self->shape, self->ndim, self->grad) : 0;
 }
 
 enum { MAX_TOPO = 1024 };

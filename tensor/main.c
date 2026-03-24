@@ -701,7 +701,7 @@ static void test_processing(void)
     ensure(tensor_ndim(out) == 2 && tensor_shape(out)[0] == 2 && tensor_shape(out)[1] == 2);
     ensure(isclose(tensor_data(out)[0], 0.11920292F) && isclose(tensor_data(out)[2], 0.88079708F));
 
-    // tensor_dot: [1,2,3] · [4,5,6] = 32
+    // tensor_dot: [1,2,3] . [4,5,6] = 32
     Tensor *lhs = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
     Tensor *rhs = tensor_from((int[]){3}, 1, (float[]){4, 5, 6});
     out = tensor_dot(lhs, rhs);
