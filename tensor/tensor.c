@@ -19,6 +19,8 @@ typedef struct stack {
 } Stack;
 
 static Stack *g_head = 0;
+static Stack *g_save[MAX_SAVE];
+static int g_index = 0;
 
 static void *stack_malloc(size_t num, size_t size)
 {
@@ -57,9 +59,6 @@ static void *stack_pop(void)
     return ptr;
 }
 
-static int g_index = 0;
-static Stack *g_save[MAX_SAVE];
-
 static void stack_save(void)
 {
     assert(g_index < MAX_SAVE);
@@ -68,11 +67,35 @@ static void stack_save(void)
 
 static void stack_restore(void)
 {
-    assert(g_index - 1 >= 0);
+    assert(g_index > 0);
     Stack *save = g_save[--g_index];
     while (g_head != save) {
         free(stack_pop());
     }
+}
+
+// context
+
+static int g_grad_enabled = 1;
+
+void tensor_frame_begin(void)
+{
+    stack_save();
+}
+
+void tensor_frame_end(void)
+{
+    stack_restore();
+}
+
+void tensor_no_grad_begin(void)
+{
+    g_grad_enabled = 0;
+}
+
+void tensor_no_grad_end(void)
+{
+    g_grad_enabled = 1;
 }
 
 // tensor
@@ -96,30 +119,6 @@ struct tensor {
     float *grad;
     Autograd *ctx;
 };
-
-// context
-
-void tensor_frame_begin(void)
-{
-    stack_save();
-}
-
-void tensor_frame_end(void)
-{
-    stack_restore();
-}
-
-static int g_grad_enabled = 1;
-
-void tensor_no_grad_begin(void)
-{
-    g_grad_enabled = 0;
-}
-
-void tensor_no_grad_end(void)
-{
-    g_grad_enabled = 1;
-}
 
 // access
 
@@ -151,6 +150,19 @@ float *tensor_data(const Tensor *self)
 {
     assert(self);
     return self->data;
+}
+
+Tensor *tensor_requires_grad(Tensor *self)
+{
+    assert(self);
+    self->requires_grad = 1;
+    return self;
+}
+
+Tensor *tensor_grad(const Tensor *self)
+{
+    assert(self);
+    return self->grad ? tensor_wrap(self->shape, self->ndim, self->grad) : 0;
 }
 
 // creation
@@ -216,9 +228,6 @@ Tensor *tensor_ones(const int *shape, int ndim)
 
 Tensor *tensor_fill(const int *shape, int ndim, float value)
 {
-    if (value == 0) {
-        return tensor_zeros(shape, ndim);
-    }
     Tensor *out = tensor_empty(shape, ndim);
     for (long i = 0; i < out->numel; i++) {
         out->data[i] = value;
@@ -746,11 +755,11 @@ Tensor *tensor_cat(const Tensor **src, int num, int dim)
 Tensor *tensor_stack(const Tensor **src, int num, int dim)
 {
     assert(src && src[0] && num > 0);
-    const Tensor *tmp[num];
+    const Tensor *uns[num];
     for (int i = 0; i < num; i++) {
-        tmp[i] = tensor_unsqueeze(src[i], dim);
+        uns[i] = tensor_unsqueeze(src[i], dim);
     }
-    return tensor_cat(tmp, num, dim);
+    return tensor_cat(uns, num, dim);
 }
 
 Tensor *tensor_contiguous(const Tensor *src)
@@ -783,6 +792,8 @@ Tensor *tensor_detach(const Tensor *src)
 }
 
 // unary
+
+typedef void Unary(float *, const float *, long, int);
 
 static void neg_kernel(float *out, const float *src, long stride_src, int num)
 {
@@ -835,6 +846,13 @@ static void exp_kernel(float *out, const float *src, long stride_src, int num)
     }
 }
 
+static void log_kernel(float *out, const float *src, long stride_src, int num)
+{
+    for (int i = 0; i < num; i++) {
+        out[i] = logf(src[i * stride_src]);
+    }
+}
+
 static void sin_kernel(float *out, const float *src, long stride_src, int num)
 {
     for (int i = 0; i < num; i++) {
@@ -853,13 +871,6 @@ static void tan_kernel(float *out, const float *src, long stride_src, int num)
 {
     for (int i = 0; i < num; i++) {
         out[i] = tanf(src[i * stride_src]);
-    }
-}
-
-static void log_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = logf(src[i * stride_src]);
     }
 }
 
@@ -912,8 +923,6 @@ static void logical_not_kernel(float *out, const float *src, long stride_src, in
         out[i] = (src[i * stride_src] == 0) ? 1 : 0;
     }
 }
-
-typedef void Unary(float *, const float *, long, int);
 
 static void apply_unary(Tensor *out, long offset_out, const Tensor *src, long offset_src, int dim,
                         Unary *func)
@@ -977,6 +986,11 @@ Tensor *tensor_exp(const Tensor *src)
     return unary(src, exp_kernel);
 }
 
+Tensor *tensor_log(const Tensor *src)
+{
+    return unary(src, log_kernel);
+}
+
 Tensor *tensor_sin(const Tensor *src)
 {
     return unary(src, sin_kernel);
@@ -990,11 +1004,6 @@ Tensor *tensor_cos(const Tensor *src)
 Tensor *tensor_tan(const Tensor *src)
 {
     return unary(src, tan_kernel);
-}
-
-Tensor *tensor_log(const Tensor *src)
-{
-    return unary(src, log_kernel);
 }
 
 Tensor *tensor_floor(const Tensor *src)
@@ -1034,6 +1043,8 @@ Tensor *tensor_logical_not(const Tensor *src)
 
 // binary
 
+typedef void Binary(float *, const float *, long, const float *, long, int);
+
 static void add_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
                        long stride_rhs, int num)
 {
@@ -1070,8 +1081,9 @@ static void mod_kernel(float *out, const float *lhs, long stride_lhs, const floa
                        long stride_rhs, int num)
 {
     for (int i = 0; i < num; i++) {
+        float val_lhs = lhs[i * stride_lhs];
         float val_rhs = rhs[i * stride_rhs];
-        float mod = fmodf(lhs[i * stride_lhs], val_rhs);
+        float mod = fmodf(val_lhs, val_rhs);
         out[i] = (mod != 0 && (mod < 0) != (val_rhs < 0)) ? (mod + val_rhs) : mod;
     }
 }
@@ -1186,8 +1198,6 @@ static int broadcast_binary(int *shape, const Tensor *lhs, const Tensor *rhs)
     }
     return ndim;
 }
-
-typedef void Binary(float *, const float *, long, const float *, long, int);
 
 static void apply_binary(Tensor *out, long offset_out, const Tensor *lhs, long offset_lhs,
                          const Tensor *rhs, long offset_rhs, int dim, Binary *func)
@@ -1396,6 +1406,8 @@ Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs)
 
 // ternary
 
+typedef void Ternary(float *, const float *, long, const float *, long, const float *, long, int);
+
 static void where_kernel(float *out, const float *lhs, long stride_lhs, const float *mid,
                          long stride_mid, const float *rhs, long stride_rhs, int num)
 {
@@ -1453,8 +1465,6 @@ static int broadcast_ternary(int *shape, const Tensor *lhs, const Tensor *mid, c
     return ndim;
 }
 
-typedef void Ternary(float *, const float *, long, const float *, long, const float *, long, int);
-
 static void apply_ternary(Tensor *out, long offset_out, const Tensor *lhs, long offset_lhs,
                           const Tensor *mid, long offset_mid, const Tensor *rhs, long offset_rhs,
                           int dim, Ternary *func)
@@ -1508,6 +1518,8 @@ Tensor *tensor_clamp(const Tensor *src, const Tensor *min, const Tensor *max)
 }
 
 // reduction
+
+typedef void Reduce(float *, const float *, long, long);
 
 static void min_kernel(float *out, const float *src, long stride_src, long num)
 {
@@ -1572,8 +1584,6 @@ static void any_kernel(float *out, const float *src, long stride_src, long num)
         }
     }
 }
-
-typedef void Reduce(float *, const float *, long, long);
 
 static void apply_reduce(Tensor *out, long offset_out, const Tensor *src, long offset_src, int dim,
                          Reduce *func, int axis)
@@ -1690,6 +1700,8 @@ Tensor *tensor_norm(const Tensor *src, int axis, int keepdim)
 
 // argreduction
 
+typedef void ArgReduce(long *, const float *, long, long);
+
 static void argmin_kernel(long *index, const float *src, long stride_src, long num)
 {
     float acc = src[0];
@@ -1717,8 +1729,6 @@ static void argmax_kernel(long *index, const float *src, long stride_src, long n
     }
     *index = arg;
 }
-
-typedef void ArgReduce(long *, const float *, long, long);
 
 static void apply_argreduce(const long *stride, long *index, long offset_index, const Tensor *src,
                             long offset_src, int dim, ArgReduce *func, int axis)
@@ -1926,19 +1936,6 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
 }
 
 // autograd
-
-Tensor *tensor_requires_grad(Tensor *self)
-{
-    assert(self);
-    self->requires_grad = 1;
-    return self;
-}
-
-Tensor *tensor_grad(const Tensor *self)
-{
-    assert(self);
-    return self->grad ? tensor_wrap(self->shape, self->ndim, self->grad) : 0;
-}
 
 enum { MAX_TOPO = 1024 };
 

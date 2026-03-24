@@ -16,6 +16,8 @@ long tensor_numel(const Tensor *self);
 const int *tensor_shape(const Tensor *self);
 const long *tensor_stride(const Tensor *self);
 float *tensor_data(const Tensor *self);
+Tensor *tensor_requires_grad(Tensor *self);
+Tensor *tensor_grad(const Tensor *self);  // returns 0 if no grad
 
 // creation
 
@@ -62,10 +64,10 @@ Tensor *tensor_square(const Tensor *src);
 Tensor *tensor_sqrt(const Tensor *src);
 Tensor *tensor_rsqrt(const Tensor *src);  // 1/sqrt(x)
 Tensor *tensor_exp(const Tensor *src);
+Tensor *tensor_log(const Tensor *src);
 Tensor *tensor_sin(const Tensor *src);
 Tensor *tensor_cos(const Tensor *src);
 Tensor *tensor_tan(const Tensor *src);
-Tensor *tensor_log(const Tensor *src);
 Tensor *tensor_floor(const Tensor *src);
 Tensor *tensor_ceil(const Tensor *src);
 Tensor *tensor_round(const Tensor *src);  // half away from zero
@@ -128,8 +130,6 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);  // supports batche
 
 // autograd
 
-Tensor *tensor_requires_grad(Tensor *self);
-Tensor *tensor_grad(const Tensor *self);                 // returns 0 if no grad
 void tensor_backward(Tensor *self, const Tensor *grad);  // pass 0 for grad when loss is scalar
 void tensor_zero_grad(Tensor *self);
 
