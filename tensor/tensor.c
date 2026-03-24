@@ -1878,19 +1878,16 @@ void tensor_backward(Tensor *self, const Tensor *grad)
 {
     assert(self);
 
-    if (!self->grad) {
-        self->grad = stack_calloc(self->numel, sizeof(*self->grad));
-    }
-
     if (grad) {
         assert(grad->numel == self->numel);
-        for (long i = 0; i < self->numel; i++) {
-            self->grad[i] += grad->data[i];
-        }
+        self->grad = grad->data;
     }
     else {
+        if (!self->grad) {
+            self->grad = stack_malloc(self->numel, sizeof(*self->grad));
+        }
         for (long i = 0; i < self->numel; i++) {
-            self->grad[i] += 1;
+            self->grad[i] = 1;
         }
     }
 
