@@ -27,6 +27,7 @@ Tensor *tensor_linspace(float start, float stop, int steps);
 Tensor *tensor_logspace(float base, float start, float stop, int steps);
 Tensor *tensor_eye(int rows, int cols);
 Tensor *tensor_from(const int *shape, int ndim, const float *data);  // copies data
+Tensor *tensor_wrap(const int *shape, int ndim, float *data);        // view, no copy
 Tensor *tensor_scalar(float value);
 Tensor *tensor_rand(const int *shape, int ndim);
 Tensor *tensor_randn(const int *shape, int ndim);

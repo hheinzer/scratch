@@ -55,6 +55,13 @@ static void test_creation(void)
     data[0] = 99;
     ensure(tensor_data(tensor)[0] == 1);  // copy, not a reference
 
+    // tensor_wrap
+    float wrap_data[] = {1, 2, 3};
+    tensor = tensor_wrap((int[]){3}, 1, wrap_data);
+    ensure(tensor_data(tensor) == wrap_data);  // view, not a copy
+    wrap_data[0] = 99;
+    ensure(tensor_data(tensor)[0] == 99);  // reflects mutation
+
     // tensor_scalar
     tensor = tensor_scalar(7);
     ensure(tensor_ndim(tensor) == 0 && tensor_data(tensor)[0] == 7);

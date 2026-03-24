@@ -287,6 +287,20 @@ Tensor *tensor_from(const int *shape, int ndim, const float *data)
     return out;
 }
 
+Tensor *tensor_wrap(const int *shape, int ndim, float *data)
+{
+    assert(data);
+    Tensor *out = stack_calloc(1, sizeof(*out));
+    out->ndim = ndim;
+    out->numel = compute_numel(shape, ndim);
+    if (ndim > 0) {
+        memcpy(out->shape, shape, ndim * sizeof(*shape));
+        compute_stride(out->stride, out->shape, ndim);
+    }
+    out->data = data;
+    return out;
+}
+
 Tensor *tensor_scalar(float value)
 {
     return tensor_from(0, 0, &value);
