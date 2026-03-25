@@ -103,7 +103,8 @@ void tensor_no_grad_end(void)
 enum { MAX_NDIM = 8 };
 
 typedef union {
-    int as_int;
+    int axis;
+    int keepdim;
 } Saved;
 
 typedef struct {
@@ -1582,8 +1583,8 @@ static void sum_backward(Tensor *out)
     // out = sum(src, axis)  =>  d/d(src) = 1 broadcast to src->shape
     Tensor *src = out->ctx->input[0];
     if (src->requires_grad) {
-        int axis = out->ctx->saved[0].as_int;
-        int keepdim = out->ctx->saved[1].as_int;
+        int axis = out->ctx->saved[0].axis;
+        int keepdim = out->ctx->saved[1].keepdim;
         expand_grad(src, tensor_grad(out), axis, keepdim);
     }
 }
@@ -1596,8 +1597,8 @@ Tensor *tensor_sum(const Tensor *src, int axis, int keepdim)
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
         out->ctx->num_inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
-        out->ctx->saved[0].as_int = axis;
-        out->ctx->saved[1].as_int = keepdim;
+        out->ctx->saved[0].axis = axis;
+        out->ctx->saved[1].keepdim = keepdim;
         out->ctx->backward = sum_backward;
     }
     return out;
@@ -1608,8 +1609,8 @@ static void mean_backward(Tensor *out)
     // out = mean(src, axis)  =>  d/d(src) = 1/n broadcast to src->shape
     Tensor *src = out->ctx->input[0];
     if (src->requires_grad) {
-        int axis = out->ctx->saved[0].as_int;
-        int keepdim = out->ctx->saved[1].as_int;
+        int axis = out->ctx->saved[0].axis;
+        int keepdim = out->ctx->saved[1].keepdim;
         long count = (axis == INT_MAX) ? src->numel : src->shape[normalize_dim(axis, src->ndim)];
         Tensor *grad = tensor_mul(tensor_grad(out), tensor_scalar(1 / (float)count));
         expand_grad(src, grad, axis, keepdim);
@@ -1628,8 +1629,8 @@ Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
         out->ctx->num_inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
-        out->ctx->saved[0].as_int = axis;
-        out->ctx->saved[1].as_int = keepdim;
+        out->ctx->saved[0].axis = axis;
+        out->ctx->saved[1].keepdim = keepdim;
         out->ctx->backward = mean_backward;
     }
     return out;
@@ -1640,7 +1641,7 @@ static void var_backward(Tensor *out)
     // out = var(src, axis)  =>  d/d(src) = 2*(src - mean(src, axis)) / n
     Tensor *src = out->ctx->input[0];
     if (src->requires_grad) {
-        int axis = out->ctx->saved[0].as_int;
+        int axis = out->ctx->saved[0].axis;
         long count = (axis == INT_MAX) ? src->numel : src->shape[normalize_dim(axis, src->ndim)];
         Tensor *diff = tensor_sub(src, tensor_mean(src, axis, 1));
         Tensor *grad =
@@ -1657,7 +1658,7 @@ Tensor *tensor_var(const Tensor *src, int axis, int keepdim)
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
         out->ctx->num_inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
-        out->ctx->saved[0].as_int = axis;
+        out->ctx->saved[0].axis = axis;
         out->ctx->backward = var_backward;
     }
     return out;
