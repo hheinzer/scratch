@@ -701,6 +701,16 @@ static void test_autograd(void)
     ensure(tensor_data(tensor_grad(rhs))[0] == 2 && tensor_data(tensor_grad(rhs))[1] == 3 &&
            tensor_data(tensor_grad(rhs))[2] == 4);
 
+    // tensor_mul: broadcasting [2,3] * [2,1] -> rhs grad summed along axis 1
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    rhs = tensor_requires_grad(tensor_from((int[]){2, 1}, 2, (float[]){2, 3}));
+    out = tensor_mul(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 2 && tensor_data(tensor_grad(lhs))[1] == 2 &&
+           tensor_data(tensor_grad(lhs))[2] == 2 && tensor_data(tensor_grad(lhs))[3] == 3 &&
+           tensor_data(tensor_grad(lhs))[4] == 3 && tensor_data(tensor_grad(lhs))[5] == 3);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 6 && tensor_data(tensor_grad(rhs))[1] == 15);
+
     // tensor_div: lhs grad is grad/rhs, rhs grad is -grad*out/rhs
     lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 9, 16}));
     rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){2, 3, 4}));
@@ -753,6 +763,15 @@ static void test_autograd(void)
     ensure(tensor_data(tensor_grad(lhs))[0] == 0 && tensor_data(tensor_grad(lhs))[1] == 1 &&
            tensor_data(tensor_grad(lhs))[2] == 0 && tensor_data(tensor_grad(lhs))[3] == 0);
 
+    // tensor_min: axis reduction on 2D; exercises unsqueeze path in min_backward
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){3, 1, 4, 2, 5, 1}));
+    out = tensor_min(lhs, 1, 0);  // min of each row: [1, 1]
+    tensor_backward(out, 0);
+    // row 0: min at col 1; row 1: min at col 2
+    ensure(tensor_data(tensor_grad(lhs))[0] == 0 && tensor_data(tensor_grad(lhs))[1] == 1 &&
+           tensor_data(tensor_grad(lhs))[2] == 0 && tensor_data(tensor_grad(lhs))[3] == 0 &&
+           tensor_data(tensor_grad(lhs))[4] == 0 && tensor_data(tensor_grad(lhs))[5] == 1);
+
     // tensor_max: grad routes to argmax position only
     lhs = tensor_requires_grad(tensor_from((int[]){4}, 1, (float[]){3, 1, 4, 2}));
     out = tensor_max(lhs, INT_MAX, 0);
@@ -760,9 +779,26 @@ static void test_autograd(void)
     ensure(tensor_data(tensor_grad(lhs))[0] == 0 && tensor_data(tensor_grad(lhs))[1] == 0 &&
            tensor_data(tensor_grad(lhs))[2] == 1 && tensor_data(tensor_grad(lhs))[3] == 0);
 
+    // tensor_max: axis reduction on 2D; exercises unsqueeze path in max_backward
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){3, 1, 4, 2, 5, 1}));
+    out = tensor_max(lhs, 1, 0);  // max of each row: [4, 5]
+    tensor_backward(out, 0);
+    // row 0: max at col 2; row 1: max at col 1
+    ensure(tensor_data(tensor_grad(lhs))[0] == 0 && tensor_data(tensor_grad(lhs))[1] == 0 &&
+           tensor_data(tensor_grad(lhs))[2] == 1 && tensor_data(tensor_grad(lhs))[3] == 0 &&
+           tensor_data(tensor_grad(lhs))[4] == 1 && tensor_data(tensor_grad(lhs))[5] == 0);
+
     // tensor_sum: grad is 1 broadcast to src->shape; axis reduction unsqueezes before expanding
     lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
     out = tensor_sum(lhs, 0, 0);  // sum along axis 0: [5, 7, 9]
+    tensor_backward(out, 0);
+    for (int i = 0; i < 6; i++) {
+        ensure(tensor_data(tensor_grad(lhs))[i] == 1);
+    }
+
+    // tensor_sum: axis=1 reduction; tests the unsqueeze in the non-final-axis direction
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    out = tensor_sum(lhs, 1, 0);  // sum along axis 1: [6, 15]
     tensor_backward(out, 0);
     for (int i = 0; i < 6; i++) {
         ensure(tensor_data(tensor_grad(lhs))[i] == 1);
@@ -784,6 +820,14 @@ static void test_autograd(void)
         ensure(isclose(tensor_data(tensor_grad(lhs))[i], 0.25F));
     }
 
+    // tensor_mean: axis=1 reduction on 2D
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    out = tensor_mean(lhs, 1, 0);  // mean of each row: [2, 5]
+    tensor_backward(out, 0);
+    for (int i = 0; i < 6; i++) {
+        ensure(isclose(tensor_data(tensor_grad(lhs))[i], 1 / 3.F));
+    }
+
     // tensor_var: grad is 2*(src - mean)/n
     lhs = tensor_requires_grad(tensor_from((int[]){4}, 1, (float[]){1, 2, 3, 4}));
     out = tensor_var(lhs, INT_MAX, 0);
@@ -793,6 +837,19 @@ static void test_autograd(void)
            isclose(tensor_data(tensor_grad(lhs))[1], -0.25F) &&
            isclose(tensor_data(tensor_grad(lhs))[2], 0.25F) &&
            isclose(tensor_data(tensor_grad(lhs))[3], 0.75F));
+
+    // tensor_var: axis=1 reduction on 2D; this was the buggy case (keepdim unsqueeze missing)
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 6, 8}));
+    out = tensor_var(lhs, 1, 0);  // var of each row: [2/3, 8/3]
+    tensor_backward(out, 0);
+    // row 0: mean=2, 2*(src-mean)/3 = [-2/3, 0, 2/3]
+    // row 1: mean=6, 2*(src-mean)/3 = [-4/3, 0, 4/3]
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], -2 / 3.F) &&
+           isclose(tensor_data(tensor_grad(lhs))[1], 0) &&
+           isclose(tensor_data(tensor_grad(lhs))[2], 2 / 3.F) &&
+           isclose(tensor_data(tensor_grad(lhs))[3], -4 / 3.F) &&
+           isclose(tensor_data(tensor_grad(lhs))[4], 0) &&
+           isclose(tensor_data(tensor_grad(lhs))[5], 4 / 3.F));
 
     // tensor_matmul: [2,3] @ [3,2] -> grad flows back as grad@rhs.T and lhs.T@grad
     lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));

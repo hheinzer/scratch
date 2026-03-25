@@ -799,12 +799,16 @@ static Tensor *unary(const Tensor *src, Unary *func)
     return out;
 }
 
-static void accumulate_grad(Tensor *self, const Tensor *grad)
+static void ensure_grad(Tensor *self)
 {
     if (!self->grad) {
         self->grad = stack_calloc(self->numel, sizeof(*self->grad));
     }
     stack_save();
+}
+
+static void accumulate_grad(Tensor *self, const Tensor *grad)
+{
     int offset = grad->ndim - self->ndim;
     for (int i = 0; i < offset; i++) {
         grad = tensor_sum(grad, 0, 0);
@@ -824,9 +828,9 @@ static void neg_backward(Tensor *out)
 {
     // out = -src  =>  d/d(src) = -1
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_neg(grad));
+        ensure_grad(src);
+        accumulate_grad(src, tensor_neg(tensor_grad(out)));
     }
 }
 
@@ -847,9 +851,9 @@ static void abs_backward(Tensor *out)
 {
     // out = |src|  =>  d/d(src) = sign(src)
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(grad, tensor_sign(src)));
+        ensure_grad(src);
+        accumulate_grad(src, tensor_mul(tensor_grad(out), tensor_sign(src)));
     }
 }
 
@@ -875,9 +879,9 @@ static void square_backward(Tensor *out)
 {
     // out = src^2  =>  d/d(src) = 2*src
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(grad, tensor_mul(tensor_scalar(2), src)));
+        ensure_grad(src);
+        accumulate_grad(src, tensor_mul(tensor_grad(out), tensor_mul(tensor_scalar(2), src)));
     }
 }
 
@@ -898,9 +902,9 @@ static void sqrt_backward(Tensor *out)
 {
     // out = sqrt(src)  =>  d/d(src) = 1/(2*out)
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(grad, tensor_div(tensor_scalar(0.5F), out)));
+        ensure_grad(src);
+        accumulate_grad(src, tensor_mul(tensor_grad(out), tensor_div(tensor_scalar(0.5F), out)));
     }
 }
 
@@ -921,10 +925,11 @@ static void rsqrt_backward(Tensor *out)
 {
     // out = 1/sqrt(src)  =>  d/d(src) = -out^3/2
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(tensor_scalar(-0.5F),
-                                        tensor_mul(grad, tensor_mul(out, tensor_square(out)))));
+        ensure_grad(src);
+        accumulate_grad(
+            src, tensor_mul(tensor_scalar(-0.5F),
+                            tensor_mul(tensor_grad(out), tensor_mul(out, tensor_square(out)))));
     }
 }
 
@@ -945,9 +950,9 @@ static void exp_backward(Tensor *out)
 {
     // out = exp(src)  =>  d/d(src) = out
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(grad, out));
+        ensure_grad(src);
+        accumulate_grad(src, tensor_mul(tensor_grad(out), out));
     }
 }
 
@@ -968,9 +973,9 @@ static void log_backward(Tensor *out)
 {
     // out = log(src)  =>  d/d(src) = 1/src
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_div(grad, src));
+        ensure_grad(src);
+        accumulate_grad(src, tensor_div(tensor_grad(out), src));
     }
 }
 
@@ -991,9 +996,9 @@ static void relu_backward(Tensor *out)
 {
     // out = relu(src)  =>  d/d(src) = sign(out)  (1 if src > 0, else 0)
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(grad, tensor_sign(out)));
+        ensure_grad(src);
+        accumulate_grad(src, tensor_mul(tensor_grad(out), tensor_sign(out)));
     }
 }
 
@@ -1014,9 +1019,10 @@ static void sigmoid_backward(Tensor *out)
 {
     // out = sigmoid(src)  =>  d/d(src) = out*(1-out)
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(grad, tensor_mul(out, tensor_sub(tensor_scalar(1), out))));
+        ensure_grad(src);
+        accumulate_grad(
+            src, tensor_mul(tensor_grad(out), tensor_mul(out, tensor_sub(tensor_scalar(1), out))));
     }
 }
 
@@ -1037,9 +1043,10 @@ static void tanh_backward(Tensor *out)
 {
     // out = tanh(src)  =>  d/d(src) = 1-out^2
     Tensor *src = out->ctx->input[0];
-    Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(grad, tensor_sub(tensor_scalar(1), tensor_square(out))));
+        ensure_grad(src);
+        accumulate_grad(
+            src, tensor_mul(tensor_grad(out), tensor_sub(tensor_scalar(1), tensor_square(out))));
     }
 }
 
@@ -1153,12 +1160,13 @@ static void add_backward(Tensor *out)
     // out = lhs + rhs  =>  d/d(lhs) = 1,  d/d(rhs) = 1
     Tensor *lhs = out->ctx->input[0];
     Tensor *rhs = out->ctx->input[1];
-    Tensor *grad = tensor_grad(out);
     if (lhs->requires_grad) {
-        accumulate_grad(lhs, grad);
+        ensure_grad(lhs);
+        accumulate_grad(lhs, tensor_grad(out));
     }
     if (rhs->requires_grad) {
-        accumulate_grad(rhs, grad);
+        ensure_grad(rhs);
+        accumulate_grad(rhs, tensor_grad(out));
     }
 }
 
@@ -1181,12 +1189,13 @@ static void sub_backward(Tensor *out)
     // out = lhs - rhs  =>  d/d(lhs) = 1,  d/d(rhs) = -1
     Tensor *lhs = out->ctx->input[0];
     Tensor *rhs = out->ctx->input[1];
-    Tensor *grad = tensor_grad(out);
     if (lhs->requires_grad) {
-        accumulate_grad(lhs, grad);
+        ensure_grad(lhs);
+        accumulate_grad(lhs, tensor_grad(out));
     }
     if (rhs->requires_grad) {
-        accumulate_grad(rhs, tensor_neg(grad));
+        ensure_grad(rhs);
+        accumulate_grad(rhs, tensor_neg(tensor_grad(out)));
     }
 }
 
@@ -1209,12 +1218,13 @@ static void mul_backward(Tensor *out)
     // out = lhs * rhs  =>  d/d(lhs) = rhs,  d/d(rhs) = lhs
     Tensor *lhs = out->ctx->input[0];
     Tensor *rhs = out->ctx->input[1];
-    Tensor *grad = tensor_grad(out);
     if (lhs->requires_grad) {
-        accumulate_grad(lhs, tensor_mul(grad, rhs));
+        ensure_grad(lhs);
+        accumulate_grad(lhs, tensor_mul(tensor_grad(out), rhs));
     }
     if (rhs->requires_grad) {
-        accumulate_grad(rhs, tensor_mul(lhs, grad));
+        ensure_grad(rhs);
+        accumulate_grad(rhs, tensor_mul(lhs, tensor_grad(out)));
     }
 }
 
@@ -1237,12 +1247,13 @@ static void div_backward(Tensor *out)
     // out = lhs / rhs  =>  d/d(lhs) = 1/rhs,  d/d(rhs) = -out/rhs
     Tensor *lhs = out->ctx->input[0];
     Tensor *rhs = out->ctx->input[1];
-    Tensor *grad = tensor_grad(out);
     if (lhs->requires_grad) {
-        accumulate_grad(lhs, tensor_div(grad, rhs));
+        ensure_grad(lhs);
+        accumulate_grad(lhs, tensor_div(tensor_grad(out), rhs));
     }
     if (rhs->requires_grad) {
-        accumulate_grad(rhs, tensor_neg(tensor_mul(grad, tensor_div(out, rhs))));
+        ensure_grad(rhs);
+        accumulate_grad(rhs, tensor_neg(tensor_mul(tensor_grad(out), tensor_div(out, rhs))));
     }
 }
 
@@ -1265,14 +1276,15 @@ static void pow_backward(Tensor *out)
     // out = lhs^rhs  =>  d/d(lhs) = rhs*lhs^(rhs-1),  d/d(rhs) = out*log(lhs)
     Tensor *lhs = out->ctx->input[0];
     Tensor *rhs = out->ctx->input[1];
-    Tensor *grad = tensor_grad(out);
     if (lhs->requires_grad) {
+        ensure_grad(lhs);
         accumulate_grad(
-            lhs,
-            tensor_mul(grad, tensor_mul(rhs, tensor_pow(lhs, tensor_sub(rhs, tensor_scalar(1))))));
+            lhs, tensor_mul(tensor_grad(out),
+                            tensor_mul(rhs, tensor_pow(lhs, tensor_sub(rhs, tensor_scalar(1))))));
     }
     if (rhs->requires_grad) {
-        accumulate_grad(rhs, tensor_mul(grad, tensor_mul(out, tensor_log(lhs))));
+        ensure_grad(rhs);
+        accumulate_grad(rhs, tensor_mul(tensor_grad(out), tensor_mul(out, tensor_log(lhs))));
     }
 }
 
@@ -1385,12 +1397,13 @@ static void where_backward(Tensor *out)
     Tensor *cond = out->ctx->input[0];
     Tensor *if_true = out->ctx->input[1];
     Tensor *if_false = out->ctx->input[2];
-    Tensor *grad = tensor_grad(out);
     if (if_true->requires_grad) {
-        accumulate_grad(if_true, tensor_where(cond, grad, tensor_scalar(0)));
+        ensure_grad(if_true);
+        accumulate_grad(if_true, tensor_where(cond, tensor_grad(out), tensor_scalar(0)));
     }
     if (if_false->requires_grad) {
-        accumulate_grad(if_false, tensor_where(cond, tensor_scalar(0), grad));
+        ensure_grad(if_false);
+        accumulate_grad(if_false, tensor_where(cond, tensor_scalar(0), tensor_grad(out)));
     }
 }
 
@@ -1418,16 +1431,22 @@ static void clamp_backward(Tensor *out)
     Tensor *src = out->ctx->input[0];
     Tensor *min = out->ctx->input[1];
     Tensor *max = out->ctx->input[2];
-    Tensor *grad = tensor_grad(out);
-    Tensor *sign = tensor_sign(tensor_sub(out, src));
     if (src->requires_grad) {
-        accumulate_grad(src, tensor_mul(grad, tensor_sub(tensor_scalar(1), tensor_abs(sign))));
+        ensure_grad(src);
+        accumulate_grad(src, tensor_mul(tensor_grad(out),
+                                        tensor_sub(tensor_scalar(1),
+                                                   tensor_abs(tensor_sign(tensor_sub(out, src))))));
     }
     if (min->requires_grad) {
-        accumulate_grad(min, tensor_mul(grad, tensor_relu(sign)));
+        ensure_grad(min);
+        accumulate_grad(
+            min, tensor_mul(tensor_grad(out), tensor_relu(tensor_sign(tensor_sub(out, src)))));
     }
     if (max->requires_grad) {
-        accumulate_grad(max, tensor_mul(grad, tensor_relu(tensor_neg(sign))));
+        ensure_grad(max);
+        accumulate_grad(max,
+                        tensor_mul(tensor_grad(out),
+                                   tensor_relu(tensor_neg(tensor_sign(tensor_sub(out, src))))));
     }
 }
 
@@ -1559,6 +1578,7 @@ static void min_backward(Tensor *out)
     // out = min(src, axis)  =>  d/d(src) = grad at argmin positions, 0 elsewhere
     Tensor *src = out->ctx->input[0];
     if (src->requires_grad) {
+        ensure_grad(src);
         int axis = out->ctx->saved[0].axis;
         int keepdim = out->ctx->saved[1].keepdim;
         Tensor *grad = tensor_grad(out);
@@ -1591,6 +1611,7 @@ static void max_backward(Tensor *out)
     // out = max(src, axis)  =>  d/d(src) = grad at argmax positions, 0 elsewhere
     Tensor *src = out->ctx->input[0];
     if (src->requires_grad) {
+        ensure_grad(src);
         int axis = out->ctx->saved[0].axis;
         int keepdim = out->ctx->saved[1].keepdim;
         Tensor *grad = tensor_grad(out);
@@ -1624,12 +1645,10 @@ static void expand_grad(Tensor *src, Tensor *grad, int axis, int keepdim)
         grad = tensor_unsqueeze(grad, axis);
     }
     grad = tensor_contiguous(tensor_expand(grad, src->shape, src->ndim));
-    if (!src->grad) {
-        src->grad = stack_calloc(src->numel, sizeof(*src->grad));
-    }
     for (long i = 0; i < src->numel; i++) {
         src->grad[i] += grad->data[i];
     }
+    stack_restore();
 }
 
 static void sum_backward(Tensor *out)
@@ -1637,6 +1656,7 @@ static void sum_backward(Tensor *out)
     // out = sum(src, axis)  =>  d/d(src) = 1 broadcast to src->shape
     Tensor *src = out->ctx->input[0];
     if (src->requires_grad) {
+        ensure_grad(src);
         int axis = out->ctx->saved[0].axis;
         int keepdim = out->ctx->saved[1].keepdim;
         expand_grad(src, tensor_grad(out), axis, keepdim);
@@ -1663,11 +1683,12 @@ static void mean_backward(Tensor *out)
     // out = mean(src, axis)  =>  d/d(src) = 1/n broadcast to src->shape
     Tensor *src = out->ctx->input[0];
     if (src->requires_grad) {
+        ensure_grad(src);
         int axis = out->ctx->saved[0].axis;
         int keepdim = out->ctx->saved[1].keepdim;
         long count = (axis == INT_MAX) ? src->numel : src->shape[normalize_dim(axis, src->ndim)];
-        Tensor *grad = tensor_mul(tensor_grad(out), tensor_scalar(1 / (float)count));
-        expand_grad(src, grad, axis, keepdim);
+        expand_grad(src, tensor_mul(tensor_grad(out), tensor_scalar(1 / (float)count)), axis,
+                    keepdim);
     }
 }
 
@@ -1695,12 +1716,16 @@ static void var_backward(Tensor *out)
     // out = var(src, axis)  =>  d/d(src) = 2*(src - mean(src, axis)) / n
     Tensor *src = out->ctx->input[0];
     if (src->requires_grad) {
+        ensure_grad(src);
         int axis = out->ctx->saved[0].axis;
+        int keepdim = out->ctx->saved[1].keepdim;
         long count = (axis == INT_MAX) ? src->numel : src->shape[normalize_dim(axis, src->ndim)];
-        Tensor *diff = tensor_sub(src, tensor_mean(src, axis, 1));
-        Tensor *grad =
-            tensor_mul(tensor_mul(tensor_grad(out), tensor_scalar(2 / (float)count)), diff);
-        accumulate_grad(src, grad);
+        Tensor *grad = tensor_grad(out);
+        if (!keepdim && axis != INT_MAX) {
+            grad = tensor_unsqueeze(grad, axis);
+        }
+        accumulate_grad(src, tensor_mul(tensor_mul(grad, tensor_scalar(2 / (float)count)),
+                                        tensor_sub(src, tensor_mean(src, axis, 1))));
     }
 }
 
@@ -1713,6 +1738,7 @@ Tensor *tensor_var(const Tensor *src, int axis, int keepdim)
         out->ctx->num_inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->saved[0].axis = axis;
+        out->ctx->saved[1].keepdim = keepdim;
         out->ctx->backward = var_backward;
     }
     return out;
@@ -1826,12 +1852,13 @@ static void matmul_backward(Tensor *out)
     // out = lhs @ rhs  =>  d/d(lhs) = grad @ rhs.T,  d/d(rhs) = lhs.T @ grad
     Tensor *lhs = out->ctx->input[0];
     Tensor *rhs = out->ctx->input[1];
-    Tensor *grad = tensor_grad(out);
     if (lhs->requires_grad) {
-        accumulate_grad(lhs, tensor_matmul(grad, tensor_transpose(rhs, -2, -1)));
+        ensure_grad(lhs);
+        accumulate_grad(lhs, tensor_matmul(tensor_grad(out), tensor_transpose(rhs, -2, -1)));
     }
     if (rhs->requires_grad) {
-        accumulate_grad(rhs, tensor_matmul(tensor_transpose(lhs, -2, -1), grad));
+        ensure_grad(rhs);
+        accumulate_grad(rhs, tensor_matmul(tensor_transpose(lhs, -2, -1), tensor_grad(out)));
     }
 }
 
