@@ -738,6 +738,40 @@ static void test_autograd(void)
     ensure(isclose(tensor_data(tensor_grad(min))[0], 1));  // one element clamped to min
     ensure(isclose(tensor_data(tensor_grad(max))[0], 1));  // one element clamped to max
 
+    // tensor_sum: grad is 1 broadcast to src->shape; axis reduction unsqueezes before expanding
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    out = tensor_sum(lhs, 0, 0);  // sum along axis 0: [5, 7, 9]
+    tensor_backward(out, 0);
+    for (int i = 0; i < 6; i++) {
+        ensure(tensor_data(tensor_grad(lhs))[i] == 1);
+    }
+
+    // tensor_sum: global sum -> scalar, grad is 1 for all elements
+    lhs = tensor_requires_grad(tensor_from((int[]){4}, 1, (float[]){1, 2, 3, 4}));
+    out = tensor_sum(lhs, INT_MAX, 0);
+    tensor_backward(out, 0);
+    for (int i = 0; i < 4; i++) {
+        ensure(tensor_data(tensor_grad(lhs))[i] == 1);
+    }
+
+    // tensor_mean: grad is 1/n broadcast to src->shape
+    lhs = tensor_requires_grad(tensor_from((int[]){4}, 1, (float[]){1, 2, 3, 4}));
+    out = tensor_mean(lhs, INT_MAX, 0);
+    tensor_backward(out, 0);
+    for (int i = 0; i < 4; i++) {
+        ensure(isclose(tensor_data(tensor_grad(lhs))[i], 0.25F));
+    }
+
+    // tensor_var: grad is 2*(src - mean)/n
+    lhs = tensor_requires_grad(tensor_from((int[]){4}, 1, (float[]){1, 2, 3, 4}));
+    out = tensor_var(lhs, INT_MAX, 0);
+    tensor_backward(out, 0);
+    // mean=2.5, 2*(src-mean)/4: [-0.75, -0.25, 0.25, 0.75]
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], -0.75F) &&
+           isclose(tensor_data(tensor_grad(lhs))[1], -0.25F) &&
+           isclose(tensor_data(tensor_grad(lhs))[2], 0.25F) &&
+           isclose(tensor_data(tensor_grad(lhs))[3], 0.75F));
+
     tensor_frame_end();
 }
 
