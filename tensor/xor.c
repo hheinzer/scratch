@@ -12,7 +12,7 @@ static Tensor *forward(Tensor *X, Tensor *W1, Tensor *b1, Tensor *W2, Tensor *b2
     return tensor_sigmoid(tensor_add(tensor_matmul(a1, W2), b2));
 }
 
-static void update_grad(Tensor *param, float lr)
+static void update(Tensor *param, float lr)
 {
     Tensor *grad = tensor_grad(param);
     if (!grad) {
@@ -24,6 +24,7 @@ static void update_grad(Tensor *param, float lr)
     for (long i = 0; i < numel; i++) {
         pdata[i] -= lr * gdata[i];
     }
+    tensor_zero_grad(param);
 }
 
 int main(void)
@@ -51,8 +52,7 @@ int main(void)
 
         tensor_no_grad_begin();
         for (int i = 0; i < 4; i++) {
-            update_grad(param[i], lr);
-            tensor_zero_grad(param[i]);
+            update(param[i], lr);
         }
         tensor_no_grad_end();
 
