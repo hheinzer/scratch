@@ -535,12 +535,7 @@ Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
         end += size;
     }
     assert(0 <= beg && beg < size);
-    if (step > 0) {
-        assert(beg <= end && end <= size);
-    }
-    else {
-        assert(-1 <= end && end <= beg);
-    }
+    assert((step > 0) ? (beg <= end && end <= size) : (-1 <= end && end <= beg));
     Tensor *out = stack_memdup(src, 1, sizeof(*out));
     out->data += beg * src->stride[dim];
     if (step > 0) {
