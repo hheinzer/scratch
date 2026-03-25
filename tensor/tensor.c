@@ -102,10 +102,15 @@ void tensor_no_grad_end(void)
 
 enum { MAX_NDIM = 8 };
 
+typedef union {
+    int *as_int;
+    Tensor *as_tensor;
+} Saved;
+
 typedef struct {
     int num_inputs;
     Tensor *input[3];
-    Tensor *saved[3];
+    Saved saved[3];
     void (*backward)(Tensor *);
 } Autograd;
 
