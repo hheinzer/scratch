@@ -794,14 +794,71 @@ static Tensor *unary(const Tensor *src, Unary *func)
     return out;
 }
 
+static void accumulate_grad(Tensor *self, const Tensor *grad)
+{
+    if (!self->grad) {
+        self->grad = stack_calloc(self->numel, sizeof(*self->grad));
+    }
+    stack_save();
+    int offset = grad->ndim - self->ndim;
+    for (int i = 0; i < offset; i++) {
+        grad = tensor_sum(grad, 0, 1);
+    }
+    for (int i = 0; i < self->ndim; i++) {
+        if (self->shape[i] == 1) {
+            grad = tensor_sum(grad, i, 1);
+        }
+    }
+    for (long i = 0; i < self->numel; i++) {
+        self->grad[i] += grad->data[i];
+    }
+    stack_restore();
+}
+
+static void neg_backward(Tensor *out)
+{
+    // out = -src  =>  d/d(src) = -1
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_neg(grad));
+    }
+}
+
 Tensor *tensor_neg(const Tensor *src)
 {
-    return unary(src, neg_kernel);
+    Tensor *out = unary(src, neg_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = neg_backward;
+    }
+    return out;
+}
+
+static void abs_backward(Tensor *out)
+{
+    // out = |src|  =>  d/d(src) = sign(src)
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_mul(grad, tensor_sign(src)));
+    }
 }
 
 Tensor *tensor_abs(const Tensor *src)
 {
-    return unary(src, abs_kernel);
+    Tensor *out = unary(src, abs_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = abs_backward;
+    }
+    return out;
 }
 
 Tensor *tensor_sign(const Tensor *src)
@@ -809,44 +866,189 @@ Tensor *tensor_sign(const Tensor *src)
     return unary(src, sign_kernel);
 }
 
+static void square_backward(Tensor *out)
+{
+    // out = src^2  =>  d/d(src) = 2*src
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_mul(grad, tensor_mul(tensor_scalar(2), src)));
+    }
+}
+
 Tensor *tensor_square(const Tensor *src)
 {
-    return unary(src, square_kernel);
+    Tensor *out = unary(src, square_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = square_backward;
+    }
+    return out;
+}
+
+static void sqrt_backward(Tensor *out)
+{
+    // out = sqrt(src)  =>  d/d(src) = 1/(2*out)
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_mul(grad, tensor_div(tensor_scalar(0.5F), out)));
+    }
 }
 
 Tensor *tensor_sqrt(const Tensor *src)
 {
-    return unary(src, sqrt_kernel);
+    Tensor *out = unary(src, sqrt_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = sqrt_backward;
+    }
+    return out;
+}
+
+static void rsqrt_backward(Tensor *out)
+{
+    // out = 1/sqrt(src)  =>  d/d(src) = -out^3/2
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_mul(tensor_scalar(-0.5F),
+                                        tensor_mul(grad, tensor_mul(out, tensor_square(out)))));
+    }
 }
 
 Tensor *tensor_rsqrt(const Tensor *src)
 {
-    return unary(src, rsqrt_kernel);
+    Tensor *out = unary(src, rsqrt_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = rsqrt_backward;
+    }
+    return out;
+}
+
+static void exp_backward(Tensor *out)
+{
+    // out = exp(src)  =>  d/d(src) = out
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_mul(grad, out));
+    }
 }
 
 Tensor *tensor_exp(const Tensor *src)
 {
-    return unary(src, exp_kernel);
+    Tensor *out = unary(src, exp_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = exp_backward;
+    }
+    return out;
+}
+
+static void log_backward(Tensor *out)
+{
+    // out = log(src)  =>  d/d(src) = 1/src
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_div(grad, src));
+    }
 }
 
 Tensor *tensor_log(const Tensor *src)
 {
-    return unary(src, log_kernel);
+    Tensor *out = unary(src, log_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = log_backward;
+    }
+    return out;
+}
+
+static void relu_backward(Tensor *out)
+{
+    // out = relu(src)  =>  d/d(src) = 1 if src > 0, else 0 = sign(out)
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_mul(grad, tensor_sign(out)));
+    }
 }
 
 Tensor *tensor_relu(const Tensor *src)
 {
-    return unary(src, relu_kernel);
+    Tensor *out = unary(src, relu_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = relu_backward;
+    }
+    return out;
+}
+
+static void sigmoid_backward(Tensor *out)
+{
+    // out = sigmoid(src)  =>  d/d(src) = out*(1-out)
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_mul(grad, tensor_mul(out, tensor_sub(tensor_scalar(1), out))));
+    }
 }
 
 Tensor *tensor_sigmoid(const Tensor *src)
 {
-    return unary(src, sigmoid_kernel);
+    Tensor *out = unary(src, sigmoid_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = sigmoid_backward;
+    }
+    return out;
+}
+
+static void tanh_backward(Tensor *out)
+{
+    // out = tanh(src)  =>  d/d(src) = 1 - out^2
+    Tensor *src = out->ctx->input[0];
+    Tensor *grad = tensor_wrap(out->shape, out->ndim, out->grad);
+    if (src->requires_grad) {
+        accumulate_grad(src, tensor_mul(grad, tensor_sub(tensor_scalar(1), tensor_square(out))));
+    }
 }
 
 Tensor *tensor_tanh(const Tensor *src)
 {
-    return unary(src, tanh_kernel);
+    Tensor *out = unary(src, tanh_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = tanh_backward;
+    }
+    return out;
 }
 
 // binary
@@ -939,27 +1141,6 @@ static Tensor *binary(const Tensor *lhs, const Tensor *rhs, Binary *func)
         apply_binary(out, 0, lhs, 0, rhs, 0, 0, func);
     }
     return out;
-}
-
-static void accumulate_grad(Tensor *self, const Tensor *grad)
-{
-    if (!self->grad) {
-        self->grad = stack_calloc(self->numel, sizeof(*self->grad));
-    }
-    stack_save();
-    int offset = grad->ndim - self->ndim;
-    for (int i = 0; i < offset; i++) {
-        grad = tensor_sum(grad, 0, 1);
-    }
-    for (int i = 0; i < self->ndim; i++) {
-        if (self->shape[i] == 1) {
-            grad = tensor_sum(grad, i, 1);
-        }
-    }
-    for (long i = 0; i < self->numel; i++) {
-        self->grad[i] += grad->data[i];
-    }
-    stack_restore();
 }
 
 static void add_backward(Tensor *out)
@@ -1662,8 +1843,11 @@ static const char *backward_name(void (*func)(Tensor *))
         void (*func)(Tensor *);
         const char *name;
     } map[] = {
-        {add_backward, "add"}, {sub_backward, "sub"}, {mul_backward, "mul"},
-        {div_backward, "div"}, {pow_backward, "pow"},
+        {neg_backward, "neg"},   {abs_backward, "abs"},     {square_backward, "square"},
+        {sqrt_backward, "sqrt"}, {rsqrt_backward, "rsqrt"}, {exp_backward, "exp"},
+        {log_backward, "log"},   {relu_backward, "relu"},   {sigmoid_backward, "sigmoid"},
+        {tanh_backward, "tanh"}, {add_backward, "add"},     {sub_backward, "sub"},
+        {mul_backward, "mul"},   {div_backward, "div"},     {pow_backward, "pow"},
     };
     for (int i = 0; i < (int)(sizeof(map) / sizeof(*map)); i++) {
         if (map[i].func == func) {

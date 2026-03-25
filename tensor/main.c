@@ -566,10 +566,83 @@ static void test_autograd(void)
 {
     tensor_frame_begin();
 
-    // tensor_add: grad flows to both inputs
+    // tensor_neg: grad is negated
     Tensor *lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
+    Tensor *out = tensor_neg(lhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == -1 && tensor_data(tensor_grad(lhs))[1] == -1 &&
+           tensor_data(tensor_grad(lhs))[2] == -1);
+
+    // tensor_abs: grad is sign(src)
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){-2, 3, -4}));
+    out = tensor_abs(lhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == -1 && tensor_data(tensor_grad(lhs))[1] == 1 &&
+           tensor_data(tensor_grad(lhs))[2] == -1);
+
+    // tensor_square: grad is 2*src
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){2, 3, 4}));
+    out = tensor_square(lhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 4 && tensor_data(tensor_grad(lhs))[1] == 6 &&
+           tensor_data(tensor_grad(lhs))[2] == 8);
+
+    // tensor_sqrt: grad is 1/(2*out) = 1/(2*sqrt(src))
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 9, 16}));
+    out = tensor_sqrt(lhs);
+    tensor_backward(out, 0);
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], 0.25F) &&
+           isclose(tensor_data(tensor_grad(lhs))[1], 1 / 6.F) &&
+           isclose(tensor_data(tensor_grad(lhs))[2], 0.125F));
+
+    // tensor_rsqrt: grad is -out^3/2 = -1/(2*src^(3/2))
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 9, 16}));
+    out = tensor_rsqrt(lhs);
+    tensor_backward(out, 0);
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], -0.0625F) &&    // -0.5^3/2
+           isclose(tensor_data(tensor_grad(lhs))[1], -1 / 54.F) &&   // -(1/3)^3/2
+           isclose(tensor_data(tensor_grad(lhs))[2], -0.0078125F));  // -0.25^3/2
+
+    // tensor_exp: grad is out = exp(src)
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
+    out = tensor_exp(lhs);
+    tensor_backward(out, 0);
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], expf(1)) &&
+           isclose(tensor_data(tensor_grad(lhs))[1], expf(2)) &&
+           isclose(tensor_data(tensor_grad(lhs))[2], expf(3)));
+
+    // tensor_log: grad is 1/src
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 4}));
+    out = tensor_log(lhs);
+    tensor_backward(out, 0);
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], 1) &&
+           isclose(tensor_data(tensor_grad(lhs))[1], 0.5F) &&
+           isclose(tensor_data(tensor_grad(lhs))[2], 0.25F));
+
+    // tensor_relu: grad is 1 if src > 0, else 0
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){-1, 2, 3}));
+    out = tensor_relu(lhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 0 && tensor_data(tensor_grad(lhs))[1] == 1 &&
+           tensor_data(tensor_grad(lhs))[2] == 1);
+
+    // tensor_sigmoid: grad is out*(1-out)
+    lhs = tensor_requires_grad(tensor_from((int[]){1}, 1, (float[]){0}));
+    out = tensor_sigmoid(lhs);
+    tensor_backward(out, 0);
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], 0.25F));  // 0.5 * 0.5
+
+    // tensor_tanh: grad is 1 - out^2
+    lhs = tensor_requires_grad(tensor_from((int[]){2}, 1, (float[]){0, 1}));
+    out = tensor_tanh(lhs);
+    tensor_backward(out, 0);
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], 1) &&  // 1 - tanh(0)^2 = 1
+           isclose(tensor_data(tensor_grad(lhs))[1], 1 - (tanhf(1) * tanhf(1))));
+
+    // tensor_add: grad flows to both inputs
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
     Tensor *rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 5, 6}));
-    Tensor *out = tensor_add(lhs, rhs);
+    out = tensor_add(lhs, rhs);
     tensor_backward(out, 0);
     ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[1] == 1 &&
            tensor_data(tensor_grad(lhs))[2] == 1);
