@@ -1999,16 +1999,18 @@ void tensor_shuffle(Tensor **self, int num, int axis)
     int count = self[0]->shape[axis];
     for (int i = count - 1; i > 0; i--) {
         int idx = rand() % (i + 1);
-        if (idx == i) {
-            continue;
-        }
         for (int j = 0; j < num; j++) {
-            long stride = self[j]->stride[axis];
+            long inner = self[j]->stride[axis];
+            long outer_step = count * inner;
+            long outer_count = self[j]->numel / outer_step;
             float *data = self[j]->data;
-            for (long k = 0; k < stride; k++) {
-                float swap = data[(i * stride) + k];
-                data[(i * stride) + k] = data[(idx * stride) + k];
-                data[(idx * stride) + k] = swap;
+            for (long ext = 0; ext < outer_count; ext++) {
+                long base = ext * outer_step;
+                for (long k = 0; k < inner; k++) {
+                    float tmp = data[base + (i * inner) + k];
+                    data[base + (i * inner) + k] = data[base + (idx * inner) + k];
+                    data[base + (idx * inner) + k] = tmp;
+                }
             }
         }
     }
