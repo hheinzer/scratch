@@ -727,14 +727,6 @@ static void sign_kernel(float *out, const float *src, long stride_src, int num)
     }
 }
 
-static void square_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        float val = src[i * stride_src];
-        out[i] = val * val;
-    }
-}
-
 static void sqrt_kernel(float *out, const float *src, long stride_src, int num)
 {
     for (int i = 0; i < num; i++) {
@@ -888,27 +880,9 @@ Tensor *tensor_sign(const Tensor *src)
     return unary(src, sign_kernel);
 }
 
-static void square_backward(Tensor *out)
-{
-    // out = src^2  =>  d/d(src) = 2*src
-    Tensor *src = out->ctx->input[0];
-    if (src->requires_grad) {
-        ensure_grad(src);
-        accumulate_grad(src, tensor_mul(tensor_grad(out), tensor_mul(tensor_scalar(2), src)));
-    }
-}
-
 Tensor *tensor_square(const Tensor *src)
 {
-    Tensor *out = unary(src, square_kernel);
-    if (g_grad_enabled && src->requires_grad) {
-        out->requires_grad = 1;
-        out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
-        out->ctx->input[0] = (Tensor *)src;
-        out->ctx->backward = square_backward;
-    }
-    return out;
+    return tensor_mul(src, src);
 }
 
 static void sqrt_backward(Tensor *out)
@@ -2131,14 +2105,14 @@ static const char *backward_name(void (*func)(Tensor *))
         void (*func)(Tensor *);
         const char *name;
     } map[] = {
-        {neg_backward, "neg"},     {abs_backward, "abs"},     {square_backward, "square"},
-        {sqrt_backward, "sqrt"},   {rsqrt_backward, "rsqrt"}, {exp_backward, "exp"},
-        {log_backward, "log"},     {relu_backward, "relu"},   {sigmoid_backward, "sigmoid"},
-        {tanh_backward, "tanh"},   {add_backward, "add"},     {sub_backward, "sub"},
-        {mul_backward, "mul"},     {div_backward, "div"},     {pow_backward, "pow"},
-        {where_backward, "where"}, {clamp_backward, "clamp"}, {sum_backward, "sum"},
-        {mean_backward, "mean"},   {var_backward, "var"},     {matmul_backward, "matmul"},
-        {min_backward, "min"},     {max_backward, "max"},
+        {neg_backward, "neg"},     {abs_backward, "abs"},         {sqrt_backward, "sqrt"},
+        {rsqrt_backward, "rsqrt"}, {exp_backward, "exp"},         {log_backward, "log"},
+        {relu_backward, "relu"},   {sigmoid_backward, "sigmoid"}, {tanh_backward, "tanh"},
+        {add_backward, "add"},     {sub_backward, "sub"},         {mul_backward, "mul"},
+        {div_backward, "div"},     {pow_backward, "pow"},         {where_backward, "where"},
+        {clamp_backward, "clamp"}, {sum_backward, "sum"},         {mean_backward, "mean"},
+        {var_backward, "var"},     {matmul_backward, "matmul"},   {min_backward, "min"},
+        {max_backward, "max"},
     };
     for (int i = 0; i < (int)(sizeof(map) / sizeof(*map)); i++) {
         if (map[i].func == func) {
