@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+usage() {
+    echo "usage: $(basename "$0") [-f FREQUENCY] PROGRAM [ARGS ...]"
+}
+
+frequency=200
+while getopts "hn:f:" opt; do
+    case $opt in
+        h) usage; exit 0 ;;
+        f) frequency=$OPTARG ;;
+        *) usage >&2; exit 1 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+[ $# -ge 1 ] || {
+    usage >&2; exit 1
+}
+
+prog=$1
+
+dat=${prog}_perf.dat
+out=${prog}_perf.out
+pdf=${prog}_perf.pdf
+
+perf record -F "$frequency" -g -o "$dat" -- "$@"
+perf report -i "$dat" --stdio > "$out"
+perf script -i "$dat" | gprof2dot -f perf | dot -Tpdf -o "$pdf"
