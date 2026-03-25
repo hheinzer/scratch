@@ -13,13 +13,16 @@ CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 
 .PHONY: all clean test
 
-all: main
+all: main xor
 
 clean:
-	@rm -f main
+	@rm -f main xor
 
 test: main
 	@./main
 
 main: main.c tensor.c tensor.h
+	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
+
+xor: xor.c tensor.c tensor.h
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
