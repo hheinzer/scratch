@@ -1554,14 +1554,68 @@ static Tensor *reduce(const Tensor *src, int axis, int keepdim, Reduce *func)
     return out;
 }
 
+static void min_backward(Tensor *out)
+{
+    // out = min(src, axis)  =>  d/d(src) = grad at argmin positions, 0 elsewhere
+    Tensor *src = out->ctx->input[0];
+    if (src->requires_grad) {
+        int axis = out->ctx->saved[0].axis;
+        int keepdim = out->ctx->saved[1].keepdim;
+        Tensor *grad = tensor_grad(out);
+        if (!keepdim && axis != INT_MAX) {
+            out = tensor_unsqueeze(out, axis);
+            grad = tensor_unsqueeze(grad, axis);
+        }
+        Tensor *mask = tensor_where(tensor_sub(src, out), tensor_scalar(0), tensor_scalar(1));
+        accumulate_grad(src, tensor_mul(grad, tensor_div(mask, tensor_sum(mask, axis, 1))));
+    }
+}
+
 Tensor *tensor_min(const Tensor *src, int axis, int keepdim)
 {
-    return reduce(src, axis, keepdim, min_kernel);
+    Tensor *out = reduce(src, axis, keepdim, min_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->saved[0].axis = axis;
+        out->ctx->saved[1].keepdim = keepdim;
+        out->ctx->backward = min_backward;
+    }
+    return out;
+}
+
+static void max_backward(Tensor *out)
+{
+    // out = max(src, axis)  =>  d/d(src) = grad at argmax positions, 0 elsewhere
+    Tensor *src = out->ctx->input[0];
+    if (src->requires_grad) {
+        int axis = out->ctx->saved[0].axis;
+        int keepdim = out->ctx->saved[1].keepdim;
+        Tensor *grad = tensor_grad(out);
+        if (!keepdim && axis != INT_MAX) {
+            out = tensor_unsqueeze(out, axis);
+            grad = tensor_unsqueeze(grad, axis);
+        }
+        Tensor *mask = tensor_where(tensor_sub(src, out), tensor_scalar(0), tensor_scalar(1));
+        accumulate_grad(src, tensor_mul(grad, tensor_div(mask, tensor_sum(mask, axis, 1))));
+    }
 }
 
 Tensor *tensor_max(const Tensor *src, int axis, int keepdim)
 {
-    return reduce(src, axis, keepdim, max_kernel);
+    Tensor *out = reduce(src, axis, keepdim, max_kernel);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->saved[0].axis = axis;
+        out->ctx->saved[1].keepdim = keepdim;
+        out->ctx->backward = max_backward;
+    }
+    return out;
 }
 
 static void expand_grad(Tensor *src, Tensor *grad, int axis, int keepdim)
@@ -2018,6 +2072,7 @@ static const char *backward_name(void (*func)(Tensor *))
         {mul_backward, "mul"},     {div_backward, "div"},     {pow_backward, "pow"},
         {where_backward, "where"}, {clamp_backward, "clamp"}, {sum_backward, "sum"},
         {mean_backward, "mean"},   {var_backward, "var"},     {matmul_backward, "matmul"},
+        {min_backward, "min"},     {max_backward, "max"},
     };
     for (int i = 0; i < (int)(sizeof(map) / sizeof(*map)); i++) {
         if (map[i].func == func) {

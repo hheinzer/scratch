@@ -746,6 +746,20 @@ static void test_autograd(void)
     ensure(isclose(tensor_data(tensor_grad(min))[0], 1));  // one element clamped to min
     ensure(isclose(tensor_data(tensor_grad(max))[0], 1));  // one element clamped to max
 
+    // tensor_min: grad routes to argmin position only
+    lhs = tensor_requires_grad(tensor_from((int[]){4}, 1, (float[]){3, 1, 4, 2}));
+    out = tensor_min(lhs, INT_MAX, 0);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 0 && tensor_data(tensor_grad(lhs))[1] == 1 &&
+           tensor_data(tensor_grad(lhs))[2] == 0 && tensor_data(tensor_grad(lhs))[3] == 0);
+
+    // tensor_max: grad routes to argmax position only
+    lhs = tensor_requires_grad(tensor_from((int[]){4}, 1, (float[]){3, 1, 4, 2}));
+    out = tensor_max(lhs, INT_MAX, 0);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 0 && tensor_data(tensor_grad(lhs))[1] == 0 &&
+           tensor_data(tensor_grad(lhs))[2] == 1 && tensor_data(tensor_grad(lhs))[3] == 0);
+
     // tensor_sum: grad is 1 broadcast to src->shape; axis reduction unsqueezes before expanding
     lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
     out = tensor_sum(lhs, 0, 0);  // sum along axis 0: [5, 7, 9]
