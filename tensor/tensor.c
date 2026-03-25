@@ -806,7 +806,7 @@ static void accumulate_grad(Tensor *self, const Tensor *grad)
     stack_save();
     int offset = grad->ndim - self->ndim;
     for (int i = 0; i < offset; i++) {
-        grad = tensor_sum(grad, 0, 1);
+        grad = tensor_sum(grad, 0, 0);
     }
     for (int i = 0; i < self->ndim; i++) {
         if (self->shape[i] == 1) {
@@ -1261,13 +1261,14 @@ Tensor *tensor_div(const Tensor *lhs, const Tensor *rhs)
 
 static void pow_backward(Tensor *out)
 {
-    // out = lhs^rhs  =>  d/d(lhs) = rhs*out/lhs,  d/d(rhs) = out*log(lhs)
+    // out = lhs^rhs  =>  d/d(lhs) = rhs*lhs^(rhs-1),  d/d(rhs) = out*log(lhs)
     Tensor *lhs = out->ctx->input[0];
     Tensor *rhs = out->ctx->input[1];
     Tensor *grad = tensor_grad(out);
     if (lhs->requires_grad) {
-        // NOLINTNEXTLINE(readability-suspicious-call-argument)
-        accumulate_grad(lhs, tensor_mul(grad, tensor_mul(rhs, tensor_div(out, lhs))));
+        accumulate_grad(
+            lhs,
+            tensor_mul(grad, tensor_mul(rhs, tensor_pow(lhs, tensor_sub(rhs, tensor_scalar(1))))));
     }
     if (rhs->requires_grad) {
         accumulate_grad(rhs, tensor_mul(grad, tensor_mul(out, tensor_log(lhs))));
@@ -1564,7 +1565,6 @@ Tensor *tensor_max(const Tensor *src, int axis, int keepdim)
 
 static void expand_grad(Tensor *src, Tensor *grad, int axis, int keepdim)
 {
-    // restore the reduced axis in grad before expanding to src->shape
     if (!keepdim && axis != INT_MAX) {
         grad = tensor_unsqueeze(grad, axis);
     }
@@ -1639,18 +1639,13 @@ static void var_backward(Tensor *out)
 {
     // out = var(src, axis)  =>  d/d(src) = 2*(src - mean(src, axis)) / n
     Tensor *src = out->ctx->input[0];
-    if (!src->requires_grad) {
-        return;
-    }
-    int axis = out->ctx->saved[0].as_int;
-    long count = (axis == INT_MAX) ? src->numel : src->shape[normalize_dim(axis, src->ndim)];
-    Tensor *diff = tensor_sub(src, tensor_mean(src, axis, 1));
-    Tensor *grad = tensor_mul(tensor_mul(tensor_grad(out), tensor_scalar(2 / (float)count)), diff);
-    if (!src->grad) {
-        src->grad = stack_calloc(src->numel, sizeof(*src->grad));
-    }
-    for (long i = 0; i < src->numel; i++) {
-        src->grad[i] += grad->data[i];
+    if (src->requires_grad) {
+        int axis = out->ctx->saved[0].as_int;
+        long count = (axis == INT_MAX) ? src->numel : src->shape[normalize_dim(axis, src->ndim)];
+        Tensor *diff = tensor_sub(src, tensor_mean(src, axis, 1));
+        Tensor *grad =
+            tensor_mul(tensor_mul(tensor_grad(out), tensor_scalar(2 / (float)count)), diff);
+        accumulate_grad(src, grad);
     }
 }
 

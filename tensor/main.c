@@ -675,6 +675,14 @@ static void test_autograd(void)
     ensure(tensor_data(tensor_grad(rhs))[0] == 2 && tensor_data(tensor_grad(rhs))[1] == 2 &&
            tensor_data(tensor_grad(rhs))[2] == 2);
 
+    // tensor_add: broadcasting [2, 3] + [1] -> rhs grad summed over all elements
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    rhs = tensor_requires_grad(tensor_from((int[]){1}, 1, (float[]){5}));
+    out = tensor_add(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[5] == 1);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 6);
+
     // tensor_sub: lhs grad is +1, rhs grad is -1
     lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
     rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 5, 6}));
