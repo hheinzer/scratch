@@ -989,7 +989,7 @@ Tensor *tensor_log(const Tensor *src)
 
 static void relu_backward(Tensor *out)
 {
-    // out = relu(src)  =>  d/d(src) = 1 if src > 0, else 0 = sign(out)
+    // out = relu(src)  =>  d/d(src) = sign(out)  (1 if src > 0, else 0)
     Tensor *src = out->ctx->input[0];
     Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
@@ -1035,7 +1035,7 @@ Tensor *tensor_sigmoid(const Tensor *src)
 
 static void tanh_backward(Tensor *out)
 {
-    // out = tanh(src)  =>  d/d(src) = 1 - out^2
+    // out = tanh(src)  =>  d/d(src) = 1-out^2
     Tensor *src = out->ctx->input[0];
     Tensor *grad = tensor_grad(out);
     if (src->requires_grad) {
@@ -1234,7 +1234,7 @@ Tensor *tensor_mul(const Tensor *lhs, const Tensor *rhs)
 
 static void div_backward(Tensor *out)
 {
-    // out = lhs / rhs  =>  d/d(lhs) = 1/rhs,  d/d(rhs) = -lhs/rhs^2 = -out/rhs
+    // out = lhs / rhs  =>  d/d(lhs) = 1/rhs,  d/d(rhs) = -out/rhs
     Tensor *lhs = out->ctx->input[0];
     Tensor *rhs = out->ctx->input[1];
     Tensor *grad = tensor_grad(out);
@@ -1379,8 +1379,8 @@ static Tensor *ternary(const Tensor *lhs, const Tensor *mid, const Tensor *rhs, 
 static void where_backward(Tensor *out)
 {
     // out = where(cond, if_true, if_false)
-    // d/d(if_true) = grad where cond != 0, else 0
-    // d/d(if_false) = grad where cond == 0, else 0
+    // d/d(if_true)  = grad if cond != 0, else 0
+    // d/d(if_false) = grad if cond == 0, else 0
     Tensor *cond = out->ctx->input[0];
     Tensor *if_true = out->ctx->input[1];
     Tensor *if_false = out->ctx->input[2];
@@ -1410,11 +1410,10 @@ Tensor *tensor_where(const Tensor *cond, const Tensor *if_true, const Tensor *if
 
 static void clamp_backward(Tensor *out)
 {
-    // out = clamp(src, min, max)
-    // sign(out - src): 1 if clamped to min, -1 if clamped to max, 0 if not clamped
-    // d/d(src) = 1 if not clamped,     i.e. sign == 0   =>  1 - |sign|
-    // d/d(min) = 1 if clamped to min,  i.e. sign == 1   =>  relu(sign)
-    // d/d(max) = 1 if clamped to max,  i.e. sign == -1  =>  relu(-sign)
+    // out = clamp(src, min, max),  sign = sign(out - src)
+    // d/d(src) = 1 - |sign|   (sign ==  0: not clamped)
+    // d/d(min) = relu(sign)   (sign ==  1: clamped to min)
+    // d/d(max) = relu(-sign)  (sign == -1: clamped to max)
     Tensor *src = out->ctx->input[0];
     Tensor *min = out->ctx->input[1];
     Tensor *max = out->ctx->input[2];
