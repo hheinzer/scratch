@@ -1,6 +1,8 @@
 // NOLINTBEGIN(readability-identifier-length)
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "tensor.h"
 
@@ -31,6 +33,7 @@ int main(void)
     Tensor *X = tensor_from((int[]){4, 2}, 2, (float[]){0, 0, 0, 1, 1, 0, 1, 1});
     Tensor *y = tensor_from((int[]){4, 1}, 2, (float[]){0, 1, 1, 0});
 
+    srand((unsigned)time(0));
     Tensor *W1 = tensor_requires_grad(tensor_randn((int[]){2, 4}, 2));
     Tensor *b1 = tensor_requires_grad(tensor_zeros((int[]){1, 4}, 2));
     Tensor *W2 = tensor_requires_grad(tensor_randn((int[]){4, 1}, 2));
