@@ -1990,6 +1990,30 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
     return out;
 }
 
+// utility
+
+void tensor_shuffle(Tensor **self, int num, int axis)
+{
+    assert(self && self[0] && num > 0);
+    axis = normalize_dim(axis, self[0]->ndim);
+    int count = self[0]->shape[axis];
+    for (int i = count - 1; i > 0; i--) {
+        int idx = rand() % (i + 1);
+        if (idx == i) {
+            continue;
+        }
+        for (int j = 0; j < num; j++) {
+            long stride = self[j]->stride[axis];
+            float *data = self[j]->data;
+            for (long k = 0; k < stride; k++) {
+                float swap = data[(i * stride) + k];
+                data[(i * stride) + k] = data[(idx * stride) + k];
+                data[(idx * stride) + k] = swap;
+            }
+        }
+    }
+}
+
 // autograd
 
 enum { MAX_TOPO = 1024 };

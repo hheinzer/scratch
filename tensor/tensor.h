@@ -96,6 +96,10 @@ void tensor_argmax(const Tensor *src, long *index, int axis);
 
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);  // supports batched with broadcasting
 
+// utility
+
+void tensor_shuffle(Tensor **self, int num, int axis);  // same permutation applied to all
+
 // autograd
 
 void tensor_backward(Tensor *self, const Tensor *grad);  // pass 0 for grad when loss is scalar

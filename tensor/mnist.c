@@ -30,20 +30,6 @@ static Tensor *cross_entropy(Tensor *logit, const float *label, int batch)
     return tensor_neg(tensor_mean(tensor_sum(tensor_mul(one_hot, log_softmax), 1, 0), INT_MAX, 0));
 }
 
-static void shuffle(float *X, float *y, int n, int cols)
-{
-    float row[cols];
-    for (int i = n - 1; i > 0; i--) {
-        int j = rand() % (i + 1);
-        memcpy(row, X + ((long)i * cols), cols * sizeof(float));
-        memcpy(X + ((long)i * cols), X + ((long)j * cols), cols * sizeof(float));
-        memcpy(X + ((long)j * cols), row, cols * sizeof(float));
-        float tmp = y[i];
-        y[i] = y[j];
-        y[j] = tmp;
-    }
-}
-
 static float accuracy(Tensor *X, Tensor *y, Tensor *W1, Tensor *b1, Tensor *W2, Tensor *b2)
 {
     tensor_no_grad_begin();
@@ -98,12 +84,11 @@ int main(void)
     Tensor *b2 = tensor_requires_grad(tensor_zeros((int[]){1, 10}, 2));
 
     Tensor *params[] = {W1, b1, W2, b2};
-    float *X_data = tensor_data(X_train);
     float *y_data = tensor_data(y_train);
 
     int n_train = tensor_shape(X_train)[0];
     for (int epoch = 0; epoch < 10; epoch++) {
-        shuffle(X_data, y_data, n_train, 784);
+        tensor_shuffle((Tensor *[]){X_train, y_train}, 2, 0);
 
         int n_batches = 0;
         float total_loss = 0;

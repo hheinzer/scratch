@@ -72,9 +72,23 @@ static void test_creation(void)
         ensure(tensor_data(tensor)[i] >= 0 && tensor_data(tensor)[i] < 1);
     }
 
+    // tensor_uniform: values in [low, high)
+    tensor = tensor_uniform((int[]){100}, 1, 2, 5);
+    ensure(tensor_numel(tensor) == 100);
+    for (long i = 0; i < tensor_numel(tensor); i++) {
+        ensure(tensor_data(tensor)[i] >= 2 && tensor_data(tensor)[i] < 5);
+    }
+
     // tensor_randn: correct shape
     tensor = tensor_randn((int[]){100}, 1);
     ensure(tensor_numel(tensor) == 100);
+
+    // tensor_normal: correct shape, values within 10 sigma
+    tensor = tensor_normal((int[]){100}, 1, 3, 1);
+    ensure(tensor_numel(tensor) == 100);
+    for (long i = 0; i < tensor_numel(tensor); i++) {
+        ensure(tensor_data(tensor)[i] >= 3 - 10 && tensor_data(tensor)[i] <= 3 + 10);
+    }
 
     tensor_frame_end();
 }
@@ -562,6 +576,30 @@ static void test_processing(void)
     tensor_frame_end();
 }
 
+static void test_utility(void)
+{
+    tensor_frame_begin();
+
+    // tensor_shuffle: rows of X and y shuffled with same permutation; all values preserved
+    // X rows are [[0,0],[1,1],[2,2],[3,3],[4,4]], y = [0,1,2,3,4]
+    Tensor *lhs = tensor_from((int[]){5, 2}, 2, (float[]){0, 0, 1, 1, 2, 2, 3, 3, 4, 4});
+    Tensor *rhs = tensor_from((int[]){5}, 1, (float[]){0, 1, 2, 3, 4});
+    tensor_shuffle((Tensor *[]){lhs, rhs}, 2, 0);
+    int seen[5] = {0};
+    float *data_lhs = tensor_data(lhs);
+    float *data_rhs = tensor_data(rhs);
+    for (int i = 0; i < 5; i++) {
+        ensure(data_lhs[(i * 2) + 0] == data_lhs[(i * 2) + 1]);  // row intact
+        ensure(data_lhs[(i * 2) + 0] == data_rhs[i]);            // x and y shuffled together
+        seen[(int)data_rhs[i]] = 1;
+    }
+    for (int i = 0; i < 5; i++) {
+        ensure(seen[i]);  // all values present
+    }
+
+    tensor_frame_end();
+}
+
 static void test_autograd(void)
 {
     tensor_frame_begin();
@@ -926,6 +964,7 @@ int main(void)
     test_reduction();
     test_argreduction();
     test_processing();
+    test_utility();
     test_autograd();
     test_io();
 }
