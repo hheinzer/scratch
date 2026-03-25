@@ -419,11 +419,11 @@ static void test_reduction(void)
     // tensor_var: [0, 2, 4] -> mean=2, var=8/3
     src = tensor_from((int[]){3}, 1, (float[]){0, 2, 4});
     out = tensor_var(src, 0, 0);
-    ensure(isclose(tensor_data(out)[0], 8 / 3.0F));
+    ensure(isclose(tensor_data(out)[0], 8 / 3.F));
 
     // tensor_std: std of [0, 2, 4] = sqrt(8/3)
     out = tensor_std(src, 0, 0);
-    ensure(isclose(tensor_data(out)[0], sqrtf(8 / 3.0F)));
+    ensure(isclose(tensor_data(out)[0], sqrtf(8 / 3.F)));
 
     // tensor_std along axis 1: [[0,2],[4,6]] -> std per row = [1, 1]
     src = tensor_from((int[]){2, 2}, 2, (float[]){0, 2, 4, 6});
@@ -619,6 +619,30 @@ static void test_autograd(void)
            tensor_data(tensor_grad(lhs))[2] == 7);
     ensure(tensor_data(tensor_grad(rhs))[0] == 2 && tensor_data(tensor_grad(rhs))[1] == 3 &&
            tensor_data(tensor_grad(rhs))[2] == 4);
+
+    // tensor_div: lhs grad is grad/rhs, rhs grad is -grad*out/rhs
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 9, 16}));
+    rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){2, 3, 4}));
+    out = tensor_div(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], 0.5F) &&
+           isclose(tensor_data(tensor_grad(lhs))[1], 1 / 3.F) &&
+           isclose(tensor_data(tensor_grad(lhs))[2], 0.25F));
+    ensure(isclose(tensor_data(tensor_grad(rhs))[0], -1) &&
+           isclose(tensor_data(tensor_grad(rhs))[1], -1) &&
+           isclose(tensor_data(tensor_grad(rhs))[2], -1));
+
+    // tensor_pow: base grad is exp*out/base, exp grad is out*log(base)
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){2, 3, 4}));
+    rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){3, 2, 2}));
+    out = tensor_pow(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(isclose(tensor_data(tensor_grad(lhs))[0], 12) &&  // 3*8/2
+           isclose(tensor_data(tensor_grad(lhs))[1], 6) &&   // 2*9/3
+           isclose(tensor_data(tensor_grad(lhs))[2], 8));    // 2*16/4
+    ensure(isclose(tensor_data(tensor_grad(rhs))[0], 8 * logf(2)) &&
+           isclose(tensor_data(tensor_grad(rhs))[1], 9 * logf(3)) &&
+           isclose(tensor_data(tensor_grad(rhs))[2], 16 * logf(4)));
 
     tensor_frame_end();
 }
