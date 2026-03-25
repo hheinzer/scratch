@@ -780,6 +780,18 @@ static void test_autograd(void)
            isclose(tensor_data(tensor_grad(lhs))[2], 0.25F) &&
            isclose(tensor_data(tensor_grad(lhs))[3], 0.75F));
 
+    // tensor_matmul: [2,3] @ [3,2] -> grad flows back as grad@rhs.T and lhs.T@grad
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    rhs = tensor_requires_grad(tensor_from((int[]){3, 2}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    out = tensor_matmul(lhs, rhs);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 3 && tensor_data(tensor_grad(lhs))[1] == 7 &&
+           tensor_data(tensor_grad(lhs))[2] == 11 && tensor_data(tensor_grad(lhs))[3] == 3 &&
+           tensor_data(tensor_grad(lhs))[4] == 7 && tensor_data(tensor_grad(lhs))[5] == 11);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 5 && tensor_data(tensor_grad(rhs))[1] == 5 &&
+           tensor_data(tensor_grad(rhs))[2] == 7 && tensor_data(tensor_grad(rhs))[3] == 7 &&
+           tensor_data(tensor_grad(rhs))[4] == 9 && tensor_data(tensor_grad(rhs))[5] == 9);
+
     tensor_frame_end();
 }
 

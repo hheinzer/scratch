@@ -1766,6 +1766,20 @@ void tensor_argmax(const Tensor *src, long *index, int axis)
 
 // processing
 
+static void matmul_backward(Tensor *out)
+{
+    // out = lhs @ rhs  =>  d/d(lhs) = grad @ rhs.T,  d/d(rhs) = lhs.T @ grad
+    Tensor *lhs = out->ctx->input[0];
+    Tensor *rhs = out->ctx->input[1];
+    Tensor *grad = tensor_grad(out);
+    if (lhs->requires_grad) {
+        accumulate_grad(lhs, tensor_matmul(grad, tensor_transpose(rhs, -2, -1)));
+    }
+    if (rhs->requires_grad) {
+        accumulate_grad(rhs, tensor_matmul(tensor_transpose(lhs, -2, -1), grad));
+    }
+}
+
 static const Tensor *matmul_prepare(const Tensor *src, long *stride, int *trans)
 {
     int ndim = src->ndim;
@@ -1827,6 +1841,15 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
     Tensor *out = tensor_empty(shape, ndim);
     long stride_out = out->stride[out->ndim - 2];
     long stride_batch = (out->ndim > 2) ? out->stride[out->ndim - 3] : 0;
+
+    if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->num_inputs = 2;
+        out->ctx->input[0] = (Tensor *)lhs;
+        out->ctx->input[1] = (Tensor *)rhs;
+        out->ctx->backward = matmul_backward;
+    }
 
     stack_save();
 
@@ -1993,7 +2016,7 @@ static const char *backward_name(void (*func)(Tensor *))
         {tanh_backward, "tanh"},   {add_backward, "add"},     {sub_backward, "sub"},
         {mul_backward, "mul"},     {div_backward, "div"},     {pow_backward, "pow"},
         {where_backward, "where"}, {clamp_backward, "clamp"}, {sum_backward, "sum"},
-        {mean_backward, "mean"},   {var_backward, "var"},
+        {mean_backward, "mean"},   {var_backward, "var"},     {matmul_backward, "matmul"},
     };
     for (int i = 0; i < (int)(sizeof(map) / sizeof(*map)); i++) {
         if (map[i].func == func) {
