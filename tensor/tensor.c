@@ -154,6 +154,7 @@ Tensor *tensor_requires_grad(Tensor *self)
 {
     assert(self);
     self->requires_grad = 1;
+    self->grad = stack_calloc(self->numel, sizeof(*self->grad));
     return self;
 }
 
