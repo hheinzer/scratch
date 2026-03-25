@@ -120,8 +120,6 @@ struct tensor {
     Autograd *ctx;
 };
 
-// access
-
 int tensor_ndim(const Tensor *self)
 {
     assert(self);
@@ -231,81 +229,6 @@ Tensor *tensor_fill(const int *shape, int ndim, float value)
     Tensor *out = tensor_empty(shape, ndim);
     for (long i = 0; i < out->numel; i++) {
         out->data[i] = value;
-    }
-    return out;
-}
-
-Tensor *tensor_range(float start, float stop, float step)
-{
-    assert(step != 0);
-    int numel = (int)ceilf((stop - start) / step) + 1;
-    float last = start + ((float)(numel - 1) * step);
-    if (numel > 1 && ((step > 0 && last > stop) || (step < 0 && last < stop))) {
-        numel -= 1;
-    }
-    assert(numel > 0);
-    Tensor *out = tensor_empty((int[]){numel}, 1);
-    for (int i = 0; i < numel; i++) {
-        out->data[i] = start + ((float)i * step);
-    }
-    return out;
-}
-
-Tensor *tensor_arange(float start, float stop, float step)
-{
-    assert(step != 0);
-    int numel = (int)ceilf((stop - start) / step);
-    float last = start + ((float)(numel - 1) * step);
-    if (numel > 0 && ((step > 0 && last >= stop) || (step < 0 && last <= stop))) {
-        numel -= 1;
-    }
-    assert(numel > 0);
-    Tensor *out = tensor_empty((int[]){numel}, 1);
-    for (int i = 0; i < numel; i++) {
-        out->data[i] = start + ((float)i * step);
-    }
-    return out;
-}
-
-Tensor *tensor_linspace(float start, float stop, int steps)
-{
-    assert(steps > 0);
-    Tensor *out = tensor_empty((int[]){steps}, 1);
-    if (steps == 1) {
-        out->data[0] = start;
-    }
-    else {
-        float step = (stop - start) / (float)(steps - 1);
-        for (int i = 0; i < steps; i++) {
-            out->data[i] = start + ((float)i * step);
-        }
-    }
-    return out;
-}
-
-Tensor *tensor_logspace(float base, float start, float stop, int steps)
-{
-    assert(steps > 0 && base > 0);
-    Tensor *out = tensor_empty((int[]){steps}, 1);
-    if (steps == 1) {
-        out->data[0] = powf(base, start);
-    }
-    else {
-        float step = (stop - start) / (float)(steps - 1);
-        for (int i = 0; i < steps; i++) {
-            out->data[i] = powf(base, start + ((float)i * step));
-        }
-    }
-    return out;
-}
-
-Tensor *tensor_eye(int rows, int cols)
-{
-    assert(rows > 0 && cols > 0);
-    Tensor *out = tensor_zeros((int[]){rows, cols}, 2);
-    int diag = (rows < cols) ? rows : cols;
-    for (long i = 0; i < diag; i++) {
-        out->data[i * (cols + 1)] = 1;
     }
     return out;
 }
@@ -488,28 +411,6 @@ Tensor *tensor_flatten(const Tensor *src, int beg_dim, int end_dim)
     return tensor_reshape(src, shape, ndim);
 }
 
-Tensor *tensor_unflatten(const Tensor *src, int dim, const int *size, int num)
-{
-    assert(src && size && num > 0 && src->ndim + num - 1 <= MAX_NDIM);
-    dim = normalize_dim(dim, src->ndim);
-    int shape[MAX_NDIM];
-    int ndim = 0;
-    for (int i = 0; i < dim; i++) {
-        shape[ndim++] = src->shape[i];
-    }
-    int unflat = 1;
-    for (int i = 0; i < num; i++) {
-        assert(size[i] > 0);
-        shape[ndim++] = size[i];
-        unflat *= size[i];
-    }
-    assert(unflat == src->shape[dim]);
-    for (int i = dim + 1; i < src->ndim; i++) {
-        shape[ndim++] = src->shape[i];
-    }
-    return tensor_reshape(src, shape, ndim);
-}
-
 Tensor *tensor_squeeze(const Tensor *src, int dim)
 {
     assert(src);
@@ -589,16 +490,6 @@ Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1)
     out->shape[dim1] = src->shape[dim0];
     out->stride[dim0] = src->stride[dim1];
     out->stride[dim1] = src->stride[dim0];
-    return out;
-}
-
-Tensor *tensor_flip(const Tensor *src, int dim)
-{
-    assert(src);
-    dim = normalize_dim(dim, src->ndim);
-    Tensor *out = stack_memdup(src, 1, sizeof(*out));
-    out->data += (src->shape[dim] - 1) * src->stride[dim];
-    out->stride[dim] = -src->stride[dim];
     return out;
 }
 
@@ -853,48 +744,6 @@ static void log_kernel(float *out, const float *src, long stride_src, int num)
     }
 }
 
-static void sin_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = sinf(src[i * stride_src]);
-    }
-}
-
-static void cos_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = cosf(src[i * stride_src]);
-    }
-}
-
-static void tan_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = tanf(src[i * stride_src]);
-    }
-}
-
-static void floor_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = floorf(src[i * stride_src]);
-    }
-}
-
-static void ceil_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = ceilf(src[i * stride_src]);
-    }
-}
-
-static void round_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = roundf(src[i * stride_src]);
-    }
-}
-
 static void relu_kernel(float *out, const float *src, long stride_src, int num)
 {
     for (int i = 0; i < num; i++) {
@@ -914,13 +763,6 @@ static void tanh_kernel(float *out, const float *src, long stride_src, int num)
 {
     for (int i = 0; i < num; i++) {
         out[i] = tanhf(src[i * stride_src]);
-    }
-}
-
-static void logical_not_kernel(float *out, const float *src, long stride_src, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = (src[i * stride_src] == 0) ? 1 : 0;
     }
 }
 
@@ -991,36 +833,6 @@ Tensor *tensor_log(const Tensor *src)
     return unary(src, log_kernel);
 }
 
-Tensor *tensor_sin(const Tensor *src)
-{
-    return unary(src, sin_kernel);
-}
-
-Tensor *tensor_cos(const Tensor *src)
-{
-    return unary(src, cos_kernel);
-}
-
-Tensor *tensor_tan(const Tensor *src)
-{
-    return unary(src, tan_kernel);
-}
-
-Tensor *tensor_floor(const Tensor *src)
-{
-    return unary(src, floor_kernel);
-}
-
-Tensor *tensor_ceil(const Tensor *src)
-{
-    return unary(src, ceil_kernel);
-}
-
-Tensor *tensor_round(const Tensor *src)
-{
-    return unary(src, round_kernel);
-}
-
 Tensor *tensor_relu(const Tensor *src)
 {
     return unary(src, relu_kernel);
@@ -1034,11 +846,6 @@ Tensor *tensor_sigmoid(const Tensor *src)
 Tensor *tensor_tanh(const Tensor *src)
 {
     return unary(src, tanh_kernel);
-}
-
-Tensor *tensor_logical_not(const Tensor *src)
-{
-    return unary(src, logical_not_kernel);
 }
 
 // binary
@@ -1077,110 +884,11 @@ static void div_kernel(float *out, const float *lhs, long stride_lhs, const floa
     }
 }
 
-static void mod_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                       long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        float val_lhs = lhs[i * stride_lhs];
-        float val_rhs = rhs[i * stride_rhs];
-        float mod = fmodf(val_lhs, val_rhs);
-        out[i] = (mod != 0 && (mod < 0) != (val_rhs < 0)) ? (mod + val_rhs) : mod;
-    }
-}
-
 static void pow_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
                        long stride_rhs, int num)
 {
     for (int i = 0; i < num; i++) {
         out[i] = powf(lhs[i * stride_lhs], rhs[i * stride_rhs]);
-    }
-}
-
-static void eq_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                      long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = (lhs[i * stride_lhs] == rhs[i * stride_rhs]) ? 1 : 0;
-    }
-}
-
-static void ne_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                      long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = (lhs[i * stride_lhs] != rhs[i * stride_rhs]) ? 1 : 0;
-    }
-}
-
-static void lt_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                      long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = (lhs[i * stride_lhs] < rhs[i * stride_rhs]) ? 1 : 0;
-    }
-}
-
-static void le_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                      long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = (lhs[i * stride_lhs] <= rhs[i * stride_rhs]) ? 1 : 0;
-    }
-}
-
-static void gt_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                      long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = (lhs[i * stride_lhs] > rhs[i * stride_rhs]) ? 1 : 0;
-    }
-}
-
-static void ge_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                      long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = (lhs[i * stride_lhs] >= rhs[i * stride_rhs]) ? 1 : 0;
-    }
-}
-
-static void logical_and_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                               long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = ((lhs[i * stride_lhs] != 0) && (rhs[i * stride_rhs] != 0)) ? 1 : 0;
-    }
-}
-
-static void logical_or_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                              long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = ((lhs[i * stride_lhs] != 0) || (rhs[i * stride_rhs] != 0)) ? 1 : 0;
-    }
-}
-
-static void logical_xor_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                               long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = ((lhs[i * stride_lhs] != 0) != (rhs[i * stride_rhs] != 0)) ? 1 : 0;
-    }
-}
-
-static void minimum_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                           long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = fminf(lhs[i * stride_lhs], rhs[i * stride_rhs]);
-    }
-}
-
-static void maximum_kernel(float *out, const float *lhs, long stride_lhs, const float *rhs,
-                           long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        out[i] = fmaxf(lhs[i * stride_lhs], rhs[i * stride_rhs]);
     }
 }
 
@@ -1339,69 +1047,9 @@ Tensor *tensor_div(const Tensor *lhs, const Tensor *rhs)
     return binary(lhs, rhs, div_kernel);
 }
 
-Tensor *tensor_mod(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, mod_kernel);
-}
-
 Tensor *tensor_pow(const Tensor *lhs, const Tensor *rhs)
 {
     return binary(lhs, rhs, pow_kernel);
-}
-
-Tensor *tensor_eq(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, eq_kernel);
-}
-
-Tensor *tensor_ne(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, ne_kernel);
-}
-
-Tensor *tensor_lt(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, lt_kernel);
-}
-
-Tensor *tensor_le(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, le_kernel);
-}
-
-Tensor *tensor_gt(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, gt_kernel);
-}
-
-Tensor *tensor_ge(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, ge_kernel);
-}
-
-Tensor *tensor_logical_and(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, logical_and_kernel);
-}
-
-Tensor *tensor_logical_or(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, logical_or_kernel);
-}
-
-Tensor *tensor_logical_xor(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, logical_xor_kernel);
-}
-
-Tensor *tensor_minimum(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, minimum_kernel);
-}
-
-Tensor *tensor_maximum(const Tensor *lhs, const Tensor *rhs)
-{
-    return binary(lhs, rhs, maximum_kernel);
 }
 
 // ternary
@@ -1416,17 +1064,6 @@ static void where_kernel(float *out, const float *lhs, long stride_lhs, const fl
         float if_true = mid[i * stride_mid];
         float if_false = rhs[i * stride_rhs];
         out[i] = (cond != 0) ? if_true : if_false;
-    }
-}
-
-static void lerp_kernel(float *out, const float *lhs, long stride_lhs, const float *mid,
-                        long stride_mid, const float *rhs, long stride_rhs, int num)
-{
-    for (int i = 0; i < num; i++) {
-        float start = lhs[i * stride_lhs];
-        float stop = mid[i * stride_mid];
-        float weight = rhs[i * stride_rhs];
-        out[i] = start + (weight * (stop - start));
     }
 }
 
@@ -1507,11 +1144,6 @@ Tensor *tensor_where(const Tensor *cond, const Tensor *if_true, const Tensor *if
     return ternary(cond, if_true, if_false, where_kernel);
 }
 
-Tensor *tensor_lerp(const Tensor *start, const Tensor *stop, const Tensor *weight)
-{
-    return ternary(start, stop, weight, lerp_kernel);
-}
-
 Tensor *tensor_clamp(const Tensor *src, const Tensor *min, const Tensor *max)
 {
     return ternary(src, min, max, clamp_kernel);
@@ -1554,35 +1186,17 @@ static void sum_kernel(float *out, const float *src, long stride_src, long num)
     *out = acc;
 }
 
-static void prod_kernel(float *out, const float *src, long stride_src, long num)
+static void var_kernel(float *out, const float *src, long stride_src, long num)
 {
-    float acc = 1;
+    float mean = 0;
+    float acc = 0;
     for (long i = 0; i < num; i++) {
-        acc *= src[i * stride_src];
+        float val = src[i * stride_src];
+        float delta = val - mean;
+        mean += delta / (float)(i + 1);
+        acc += delta * (val - mean);
     }
-    *out = acc;
-}
-
-static void all_kernel(float *out, const float *src, long stride_src, long num)
-{
-    *out = 1;
-    for (long i = 0; i < num; i++) {
-        if (src[i * stride_src] == 0) {
-            *out = 0;
-            return;
-        }
-    }
-}
-
-static void any_kernel(float *out, const float *src, long stride_src, long num)
-{
-    *out = 0;
-    for (long i = 0; i < num; i++) {
-        if (src[i * stride_src] != 0) {
-            *out = 1;
-            return;
-        }
-    }
+    *out = acc / (float)num;
 }
 
 static void apply_reduce(Tensor *out, long offset_out, const Tensor *src, long offset_src, int dim,
@@ -1658,21 +1272,6 @@ Tensor *tensor_sum(const Tensor *src, int axis, int keepdim)
     return reduce(src, axis, keepdim, sum_kernel);
 }
 
-Tensor *tensor_prod(const Tensor *src, int axis, int keepdim)
-{
-    return reduce(src, axis, keepdim, prod_kernel);
-}
-
-Tensor *tensor_all(const Tensor *src, int axis, int keepdim)
-{
-    return reduce(src, axis, keepdim, all_kernel);
-}
-
-Tensor *tensor_any(const Tensor *src, int axis, int keepdim)
-{
-    return reduce(src, axis, keepdim, any_kernel);
-}
-
 Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
 {
     Tensor *out = tensor_sum(src, axis, keepdim);
@@ -1685,7 +1284,7 @@ Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
 
 Tensor *tensor_var(const Tensor *src, int axis, int keepdim)
 {
-    return tensor_mean(tensor_square(tensor_sub(src, tensor_mean(src, axis, 1))), axis, keepdim);
+    return reduce(src, axis, keepdim, var_kernel);
 }
 
 Tensor *tensor_std(const Tensor *src, int axis, int keepdim)
@@ -1790,49 +1389,6 @@ void tensor_argmax(const Tensor *src, long *index, int axis)
 }
 
 // processing
-
-Tensor *tensor_softmax(const Tensor *src, int axis)
-{
-    Tensor *exp = tensor_exp(tensor_sub(src, tensor_max(src, axis, 1)));
-    return tensor_div(exp, tensor_sum(exp, axis, 1));
-}
-
-Tensor *tensor_log_softmax(const Tensor *src, int axis)
-{
-    Tensor *sub = tensor_sub(src, tensor_max(src, axis, 1));
-    return tensor_sub(sub, tensor_log(tensor_sum(tensor_exp(sub), axis, 1)));
-}
-
-Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *target)
-{
-    assert(logit && target && logit->ndim == 2 && target->ndim == 1);
-    assert(logit->shape[0] == target->shape[0]);
-    int numel = logit->shape[0];
-    Tensor *loss = tensor_empty((int[]){numel}, 1);
-    stack_save();
-    const Tensor *lsm = tensor_log_softmax(logit, 1);
-    if (!is_contiguous(target)) {
-        target = tensor_contiguous(target);
-    }
-    for (int i = 0; i < numel; i++) {
-        int class = (int)target->data[i];
-        assert(class >= 0 && class < logit->shape[1]);
-        loss->data[i] = -lsm->data[((long)i * lsm->stride[0]) + class];
-    }
-    stack_restore();
-    return tensor_mean(loss, INT_MAX, 0);
-}
-
-Tensor *tensor_dot(const Tensor *lhs, const Tensor *rhs)
-{
-    assert(lhs && rhs && lhs->ndim == 1 && rhs->ndim == 1);
-    assert(lhs->shape[0] == rhs->shape[0]);
-    float sum = 0;
-    for (int i = 0; i < lhs->shape[0]; i++) {
-        sum += lhs->data[i * lhs->stride[0]] * rhs->data[i * rhs->stride[0]];
-    }
-    return tensor_scalar(sum);
-}
 
 static const Tensor *matmul_prepare(const Tensor *src, long *stride, int *trans)
 {
