@@ -280,6 +280,15 @@ Tensor *tensor_rand(const int *shape, int ndim)
     return out;
 }
 
+Tensor *tensor_uniform(const int *shape, int ndim, float low, float high)
+{
+    Tensor *out = tensor_rand(shape, ndim);
+    for (long i = 0; i < out->numel; i++) {
+        out->data[i] = low + (out->data[i] * (high - low));
+    }
+    return out;
+}
+
 static void random_normal(float *rn0, float *rn1)
 {
     static const float two_pi = 2 * 3.14159265358979323846F;
@@ -302,6 +311,15 @@ Tensor *tensor_randn(const int *shape, int ndim)
     if (out->numel % 2 != 0) {
         float dummy;
         random_normal(&out->data[out->numel - 1], &dummy);
+    }
+    return out;
+}
+
+Tensor *tensor_normal(const int *shape, int ndim, float mean, float std)
+{
+    Tensor *out = tensor_randn(shape, ndim);
+    for (long i = 0; i < out->numel; i++) {
+        out->data[i] = mean + (out->data[i] * std);
     }
     return out;
 }

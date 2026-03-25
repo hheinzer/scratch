@@ -29,7 +29,9 @@ Tensor *tensor_from(const int *shape, int ndim, const float *data);  // copies d
 Tensor *tensor_wrap(const int *shape, int ndim, float *data);        // view, no copy
 Tensor *tensor_scalar(float value);
 Tensor *tensor_rand(const int *shape, int ndim);
+Tensor *tensor_uniform(const int *shape, int ndim, float low, float high);
 Tensor *tensor_randn(const int *shape, int ndim);
+Tensor *tensor_normal(const int *shape, int ndim, float mean, float std);
 
 // movement: return views where possible
 
