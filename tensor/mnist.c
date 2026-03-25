@@ -100,6 +100,11 @@ int main(void)
             Tensor *loss = cross_entropy(forward(X_b, W1, b1, W2, b2), y_data + i, batch);
             tensor_backward(loss, 0);
 
+            if (epoch == 0 && i == 0) {
+                tensor_print_backward(loss);
+                printf("\n");
+            }
+
             tensor_no_grad_begin();
             for (int k = 0; k < 4; k++) {
                 update(params[k], LR);
