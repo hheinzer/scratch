@@ -2116,62 +2116,6 @@ void tensor_print(const Tensor *self)
     printf("\n\n");
 }
 
-static const char *backward_name(void (*func)(Tensor *))
-{
-    static const struct {
-        void (*func)(Tensor *);
-        const char *name;
-    } map[] = {
-        {neg_backward, "neg"},     {abs_backward, "abs"},         {sqrt_backward, "sqrt"},
-        {rsqrt_backward, "rsqrt"}, {exp_backward, "exp"},         {log_backward, "log"},
-        {relu_backward, "relu"},   {sigmoid_backward, "sigmoid"}, {tanh_backward, "tanh"},
-        {add_backward, "add"},     {sub_backward, "sub"},         {mul_backward, "mul"},
-        {div_backward, "div"},     {pow_backward, "pow"},         {where_backward, "where"},
-        {clamp_backward, "clamp"}, {sum_backward, "sum"},         {mean_backward, "mean"},
-        {var_backward, "var"},     {matmul_backward, "matmul"},   {min_backward, "min"},
-        {max_backward, "max"},
-    };
-    for (int i = 0; i < (int)(sizeof(map) / sizeof(*map)); i++) {
-        if (map[i].func == func) {
-            return map[i].name;
-        }
-    }
-    return "?";
-}
-
-static void print_backward(const Tensor *self, int depth)
-{
-    for (int i = 0; i < depth; i++) {
-        printf("  ");
-    }
-    if (self->ctx) {
-        printf("%s", backward_name(self->ctx->backward));
-    }
-    else {
-        printf("leaf");
-    }
-    printf(" [");
-    for (int i = 0; i < self->ndim; i++) {
-        printf("%d%s", self->shape[i], i < self->ndim - 1 ? ", " : "");
-    }
-    printf("]");
-    if (self->requires_grad) {
-        printf(" (requires_grad)");
-    }
-    printf("\n");
-    if (self->ctx) {
-        for (int i = 0; i < self->ctx->inputs; i++) {
-            print_backward(self->ctx->input[i], depth + 1);
-        }
-    }
-}
-
-void tensor_print_backward(const Tensor *self)
-{
-    assert(self);
-    print_backward(self, 0);
-}
-
 void tensor_save(const Tensor *self, const char *fname)
 {
     assert(self && fname);

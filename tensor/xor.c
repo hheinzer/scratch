@@ -50,11 +50,6 @@ int main(void)
         Tensor *loss = tensor_mean(tensor_square(tensor_sub(pred, y)), INT_MAX, 0);
         tensor_backward(loss, 0);
 
-        if (epoch == 0) {
-            tensor_print_backward(loss);
-            printf("\n");
-        }
-
         tensor_no_grad_begin();
         for (int i = 0; i < 4; i++) {
             update(param[i], lr);
