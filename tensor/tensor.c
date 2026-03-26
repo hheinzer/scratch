@@ -519,7 +519,7 @@ Tensor *tensor_permute(const Tensor *src, const int *order_)
         order[i] = normalize_dim(order_[i], src->ndim);
     }
     assert(valid_permute(src, order));
-    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    Tensor *out = tensor_detach(src);
     for (int i = 0; i < src->ndim; i++) {
         out->shape[i] = src->shape[order[i]];
         out->stride[i] = src->stride[order[i]];
@@ -560,7 +560,7 @@ Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
     }
     assert(0 <= beg && beg < size);
     assert((step > 0) ? (beg <= end && end <= size) : (-1 <= end && end <= beg));
-    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    Tensor *out = tensor_detach(src);
     out->data += beg * src->stride[dim];
     if (step > 0) {
         out->shape[dim] = (end - beg + step - 1) / step;
@@ -608,7 +608,7 @@ Tensor *tensor_expand(const Tensor *src, const int *shape_, int ndim)
         }
     }
     assert(valid_shape(shape, ndim) && valid_expand(src, shape, ndim));
-    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    Tensor *out = tensor_detach(src);
     out->ndim = ndim;
     out->numel = compute_numel(shape, ndim);
     memcpy(out->shape, shape, ndim * sizeof(*shape));
