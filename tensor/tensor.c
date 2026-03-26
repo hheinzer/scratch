@@ -438,42 +438,41 @@ Tensor *tensor_flatten(const Tensor *src, int beg_dim, int end_dim)
 Tensor *tensor_squeeze(const Tensor *src, int dim)
 {
     assert(src);
-    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    int shape[MAX_NDIM];
+    int ndim = 0;
     if (dim == INT_MAX) {
-        int ndim = 0;
         for (int i = 0; i < src->ndim; i++) {
             if (src->shape[i] != 1) {
-                out->shape[ndim] = src->shape[i];
-                out->stride[ndim] = src->stride[i];
-                ndim += 1;
+                shape[ndim++] = src->shape[i];
             }
         }
-        out->ndim = ndim;
-        return out;
     }
-    dim = normalize_dim(dim, src->ndim);
-    assert(src->shape[dim] == 1);
-    out->ndim -= 1;
-    for (int i = dim; i < src->ndim - 1; i++) {
-        out->shape[i] = src->shape[i + 1];
-        out->stride[i] = src->stride[i + 1];
+    else {
+        dim = normalize_dim(dim, src->ndim);
+        assert(src->shape[dim] == 1);
+        for (int i = 0; i < src->ndim; i++) {
+            if (i != dim) {
+                shape[ndim++] = src->shape[i];
+            }
+        }
     }
-    return out;
+    return tensor_reshape(src, shape, ndim);
 }
 
 Tensor *tensor_unsqueeze(const Tensor *src, int dim)
 {
     assert(src && src->ndim < MAX_NDIM);
     dim = normalize_dim(dim, src->ndim + 1);
-    Tensor *out = stack_memdup(src, 1, sizeof(*out));
-    out->ndim += 1;
-    for (int i = src->ndim; i > dim; i--) {
-        out->shape[i] = src->shape[i - 1];
-        out->stride[i] = src->stride[i - 1];
+    int shape[MAX_NDIM];
+    int ndim = 0;
+    for (int i = 0; i < dim; i++) {
+        shape[ndim++] = src->shape[i];
     }
-    out->shape[dim] = 1;
-    out->stride[dim] = (dim < src->ndim) ? src->stride[dim] : 1;
-    return out;
+    shape[ndim++] = 1;
+    for (int i = dim; i < src->ndim; i++) {
+        shape[ndim++] = src->shape[i];
+    }
+    return tensor_reshape(src, shape, ndim);
 }
 
 static int valid_permute(const Tensor *src, const int *order)
@@ -509,12 +508,15 @@ Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1)
     assert(src);
     dim0 = normalize_dim(dim0, src->ndim);
     dim1 = normalize_dim(dim1, src->ndim);
-    Tensor *out = stack_memdup(src, 1, sizeof(*out));
-    out->shape[dim0] = src->shape[dim1];
-    out->shape[dim1] = src->shape[dim0];
-    out->stride[dim0] = src->stride[dim1];
-    out->stride[dim1] = src->stride[dim0];
-    return out;
+    int order[MAX_NDIM];
+    for (int i = 0; i < src->ndim; i++) {
+        order[i] = i;
+    }
+    order[dim0] = dim1;
+    order[dim1] = dim0;
+    return tensor_permute(src, order);
+}
+
 }
 
 Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
