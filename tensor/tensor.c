@@ -101,16 +101,22 @@ void tensor_no_grad_end(void)
 // tensor
 
 enum { MAX_NDIM = 8 };
+enum { MAX_INPUTS = 8 };
+enum { MAX_SAVED = 3 };
 
 typedef union {
+    int dim;
+    int beg;
+    int step;
     int axis;
     int keepdim;
+    int perm[MAX_NDIM];
 } Saved;
 
 typedef struct {
     int inputs;
-    Tensor *input[3];
-    Saved saved[3];
+    Tensor *input[MAX_INPUTS];
+    Saved saved[MAX_SAVED];
     void (*backward)(Tensor *);
 } Autograd;
 
@@ -359,6 +365,81 @@ static void pack_data(Tensor *out, long *offset_out, const Tensor *src, long off
     }
 }
 
+static void ensure_grad(Tensor *self)
+{
+    if (!self->grad) {
+        self->grad = stack_calloc(self->numel, sizeof(*self->grad));
+    }
+    stack_save();
+}
+
+static void reduce_grad(const Tensor *self, long offset_self, const Tensor *src, long offset_src,
+                        int dim_self, int dim_src)
+{
+    if (dim_src == src->ndim) {
+        self->grad[offset_self] += src->data[offset_src];
+        return;
+    }
+    int extra = src->ndim - self->ndim;
+    if (dim_src < extra) {
+        for (int i = 0; i < src->shape[dim_src]; i++) {
+            reduce_grad(self, offset_self, src, offset_src + (i * src->stride[dim_src]), dim_self,
+                        dim_src + 1);
+        }
+    }
+    else if (self->shape[dim_self] == 1) {
+        for (int i = 0; i < src->shape[dim_src]; i++) {
+            reduce_grad(self, offset_self, src, offset_src + (i * src->stride[dim_src]),
+                        dim_self + 1, dim_src + 1);
+        }
+    }
+    else {
+        long stride = 1;
+        for (int k = dim_self + 1; k < self->ndim; k++) {
+            stride *= self->shape[k];
+        }
+        for (int i = 0; i < self->shape[dim_self]; i++) {
+            reduce_grad(self, offset_self + (i * stride), src,
+                        offset_src + (i * src->stride[dim_src]), dim_self + 1, dim_src + 1);
+        }
+    }
+}
+
+static void accumulate_grad(Tensor *self, const Tensor *grad)
+{
+    int fast = (self->ndim == grad->ndim);
+    for (int i = 0; i < self->ndim && fast; i++) {
+        fast &= (self->shape[i] == grad->shape[i]);
+    }
+    if (fast) {
+        long stride = 1;
+        for (int i = grad->ndim - 1; i >= 0 && fast; i--) {
+            if (grad->stride[i] != stride) {
+                fast = 0;
+            }
+            stride *= grad->shape[i];
+        }
+    }
+    if (fast) {
+        for (long i = 0; i < self->numel; i++) {
+            self->grad[i] += grad->data[i];
+        }
+    }
+    else {
+        reduce_grad(self, 0, grad, 0, 0, 0);
+    }
+    stack_restore();
+}
+
+static void clone_backward(Tensor *out)
+{
+    Tensor *src = out->ctx->input[0];
+    if (src->requires_grad) {
+        ensure_grad(src);
+        accumulate_grad(src, tensor_grad(out));
+    }
+}
+
 Tensor *tensor_clone(const Tensor *src)
 {
     assert(src);
@@ -369,6 +450,13 @@ Tensor *tensor_clone(const Tensor *src)
     else {
         long offset = 0;
         pack_data(out, &offset, src, 0, 0);
+    }
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = clone_backward;
     }
     return out;
 }
@@ -407,6 +495,19 @@ static void normalize_shape(int *out_shape, const int *shape, int ndim, long num
     }
 }
 
+static void reshape_backward(Tensor *out)
+{
+    Tensor *src = out->ctx->input[0];
+    if (src->requires_grad) {
+        ensure_grad(src);
+        Tensor *grad = tensor_grad(out);
+        grad->ndim = src->ndim;
+        memcpy(grad->shape, src->shape, src->ndim * sizeof(*src->shape));
+        compute_stride(grad->stride, grad->shape, src->ndim);
+        accumulate_grad(src, grad);
+    }
+}
+
 Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim)
 {
     assert(src && ndim >= 0 && ndim <= MAX_NDIM);
@@ -427,6 +528,13 @@ Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim)
         out->data = stack_malloc(out->numel, sizeof(*out->data));
         long offset = 0;
         pack_data(out, &offset, src, 0, 0);
+    }
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = reshape_backward;
     }
     return out;
 }
@@ -511,6 +619,25 @@ static int valid_permute(const Tensor *src, const int *order)
     return 1;
 }
 
+static void permute_backward(Tensor *out)
+{
+    Tensor *src = out->ctx->input[0];
+    if (src->requires_grad) {
+        ensure_grad(src);
+        int *perm = out->ctx->saved[0].perm;
+        Tensor *grad = tensor_grad(out);
+        int shape[MAX_NDIM];
+        long stride[MAX_NDIM];
+        for (int i = 0; i < src->ndim; i++) {
+            shape[i] = grad->shape[perm[i]];
+            stride[i] = grad->stride[perm[i]];
+        }
+        memcpy(grad->shape, shape, src->ndim * sizeof(*shape));
+        memcpy(grad->stride, stride, src->ndim * sizeof(*stride));
+        accumulate_grad(src, grad);
+    }
+}
+
 Tensor *tensor_permute(const Tensor *src, const int *order_)
 {
     assert(src && order_);
@@ -523,6 +650,16 @@ Tensor *tensor_permute(const Tensor *src, const int *order_)
     for (int i = 0; i < src->ndim; i++) {
         out->shape[i] = src->shape[order[i]];
         out->stride[i] = src->stride[order[i]];
+    }
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        for (int i = 0; i < src->ndim; i++) {
+            out->ctx->saved[0].perm[order[i]] = i;
+        }
+        out->ctx->backward = permute_backward;
     }
     return out;
 }
@@ -539,6 +676,42 @@ Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1)
     order[dim0] = dim1;
     order[dim1] = dim0;
     return tensor_permute(src, order);
+}
+
+static void scatter_add(Tensor *out, long offset_out, const Tensor *src, long offset_src, int dim)
+{
+    if (dim == src->ndim - 1) {
+        for (int i = 0; i < src->shape[dim]; i++) {
+            out->data[offset_out + (i * out->stride[dim])] +=
+                src->data[offset_src + (i * src->stride[dim])];
+        }
+    }
+    else {
+        for (int i = 0; i < src->shape[dim]; i++) {
+            scatter_add(out, offset_out + (i * out->stride[dim]), src,
+                        offset_src + (i * src->stride[dim]), dim + 1);
+        }
+    }
+}
+
+static void slice_backward(Tensor *out)
+{
+    Tensor *src = out->ctx->input[0];
+    if (src->requires_grad) {
+        ensure_grad(src);
+        int dim = out->ctx->saved[0].dim;
+        int beg = out->ctx->saved[1].beg;
+        int step = out->ctx->saved[2].step;
+        Tensor grad = {0};
+        grad.ndim = src->ndim;
+        grad.numel = out->numel;
+        memcpy(grad.shape, out->shape, src->ndim * sizeof(*out->shape));
+        compute_stride(grad.stride, src->shape, src->ndim);
+        grad.data = src->grad + (beg * grad.stride[dim]);
+        grad.stride[dim] *= step;
+        scatter_add(&grad, 0, tensor_grad(out), 0, 0);
+        stack_restore();
+    }
 }
 
 Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
@@ -570,6 +743,16 @@ Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
     }
     out->stride[dim] *= step;
     out->numel = compute_numel(out->shape, out->ndim);
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->saved[0].dim = dim;
+        out->ctx->saved[1].beg = beg;
+        out->ctx->saved[2].step = step;
+        out->ctx->backward = slice_backward;
+    }
     return out;
 }
 
@@ -592,6 +775,15 @@ static int valid_expand(const Tensor *src, const int *shape, int ndim)
         }
     }
     return 1;
+}
+
+static void expand_backward(Tensor *out)
+{
+    Tensor *src = out->ctx->input[0];
+    if (src->requires_grad) {
+        ensure_grad(src);
+        accumulate_grad(src, tensor_grad(out));
+    }
 }
 
 Tensor *tensor_expand(const Tensor *src, const int *shape_, int ndim)
@@ -624,6 +816,13 @@ Tensor *tensor_expand(const Tensor *src, const int *shape_, int ndim)
                 out->stride[i] = 0;
             }
         }
+    }
+    if (g_grad_enabled && src->requires_grad) {
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->inputs = 1;
+        out->ctx->input[0] = (Tensor *)src;
+        out->ctx->backward = expand_backward;
     }
     return out;
 }
@@ -666,6 +865,38 @@ static void cat_data(Tensor *out, long offset_out, const Tensor *src, long offse
     }
 }
 
+static int any_requires_grad(const Tensor **src, int num)
+{
+    int any = 0;
+    for (int i = 0; i < num; i++) {
+        if (src[i]->requires_grad) {
+            any = 1;
+            break;
+        }
+    }
+    return any;
+}
+
+static void cat_backward(Tensor *out)
+{
+    int dim = out->ctx->saved[0].dim;
+    Tensor base = *tensor_grad(out);
+    int offset = 0;
+    for (int i = 0; i < out->ctx->inputs; i++) {
+        Tensor *src = out->ctx->input[i];
+        int len = src->shape[dim];
+        if (src->requires_grad) {
+            ensure_grad(src);
+            Tensor grad = base;
+            grad.data += offset * base.stride[dim];
+            grad.shape[dim] = len;
+            grad.numel = src->numel;
+            accumulate_grad(src, &grad);
+        }
+        offset += len;
+    }
+}
+
 Tensor *tensor_cat(const Tensor **src, int num, int dim)
 {
     assert(src && src[0] && src[0]->ndim > 0 && num > 0);
@@ -682,6 +913,17 @@ Tensor *tensor_cat(const Tensor **src, int num, int dim)
     for (int i = 0; i < num; i++) {
         cat_data(out, offset * out->stride[dim], src[i], 0, 0);
         offset += src[i]->shape[dim];
+    }
+    if (g_grad_enabled && any_requires_grad(src, num)) {
+        assert(num <= MAX_INPUTS);
+        out->requires_grad = 1;
+        out->ctx = stack_calloc(1, sizeof(*out->ctx));
+        out->ctx->inputs = num;
+        for (int i = 0; i < num; i++) {
+            out->ctx->input[i] = (Tensor *)src[i];
+        }
+        out->ctx->saved[0].dim = dim;
+        out->ctx->backward = cat_backward;
     }
     return out;
 }
@@ -802,31 +1044,6 @@ static Tensor *unary(const Tensor *src, Unary *func)
         apply_unary(out, 0, src, 0, 0, func);
     }
     return out;
-}
-
-static void ensure_grad(Tensor *self)
-{
-    if (!self->grad) {
-        self->grad = stack_calloc(self->numel, sizeof(*self->grad));
-    }
-    stack_save();
-}
-
-static void accumulate_grad(Tensor *self, const Tensor *grad)
-{
-    int offset = grad->ndim - self->ndim;
-    for (int i = 0; i < offset; i++) {
-        grad = tensor_sum(grad, 0, 0);
-    }
-    for (int i = 0; i < self->ndim; i++) {
-        if (self->shape[i] == 1) {
-            grad = tensor_sum(grad, i, 1);
-        }
-    }
-    for (long i = 0; i < self->numel; i++) {
-        self->grad[i] += grad->data[i];
-    }
-    stack_restore();
 }
 
 static void neg_backward(Tensor *out)
@@ -1626,18 +1843,6 @@ Tensor *tensor_max(const Tensor *src, int axis, int keepdim)
     return out;
 }
 
-static void expand_grad(Tensor *src, Tensor *grad, int axis, int keepdim)
-{
-    if (!keepdim && axis != INT_MAX) {
-        grad = tensor_unsqueeze(grad, axis);
-    }
-    grad = tensor_contiguous(tensor_expand(grad, src->shape, src->ndim));
-    for (long i = 0; i < src->numel; i++) {
-        src->grad[i] += grad->data[i];
-    }
-    stack_restore();
-}
-
 static void sum_backward(Tensor *out)
 {
     // out = sum(src, axis)  =>  d/d(src) = 1 broadcast to src->shape
@@ -1646,7 +1851,11 @@ static void sum_backward(Tensor *out)
         ensure_grad(src);
         int axis = out->ctx->saved[0].axis;
         int keepdim = out->ctx->saved[1].keepdim;
-        expand_grad(src, tensor_grad(out), axis, keepdim);
+        Tensor *grad = tensor_grad(out);
+        if (!keepdim && axis != INT_MAX) {
+            grad = tensor_unsqueeze(grad, axis);
+        }
+        accumulate_grad(src, tensor_expand(grad, src->shape, src->ndim));
     }
 }
 
@@ -1674,8 +1883,11 @@ static void mean_backward(Tensor *out)
         int axis = out->ctx->saved[0].axis;
         int keepdim = out->ctx->saved[1].keepdim;
         long count = (axis == INT_MAX) ? src->numel : src->shape[normalize_dim(axis, src->ndim)];
-        expand_grad(src, tensor_mul(tensor_grad(out), tensor_scalar(1 / (float)count)), axis,
-                    keepdim);
+        Tensor *grad = tensor_mul(tensor_grad(out), tensor_scalar(1 / (float)count));
+        if (!keepdim && axis != INT_MAX) {
+            grad = tensor_unsqueeze(grad, axis);
+        }
+        accumulate_grad(src, tensor_expand(grad, src->shape, src->ndim));
     }
 }
 

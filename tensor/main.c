@@ -604,9 +604,65 @@ static void test_autograd(void)
 {
     tensor_frame_begin();
 
+    // tensor_reshape: grad is reshaped back to src shape
+    Tensor *lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    Tensor *out = tensor_sum(tensor_reshape(lhs, (int[]){3, 2}, 2), INT_MAX, 0);
+    tensor_backward(out, 0);
+    for (int i = 0; i < 6; i++) {
+        ensure(tensor_data(tensor_grad(lhs))[i] == 1);
+    }
+
+    // tensor_transpose: grad flows with transposed indices
+    // loss = sum(transpose(lhs) * coeff); grad_lhs = transpose(coeff)
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 2}, 2, (float[]){1, 2, 3, 4}));
+    Tensor *rhs = tensor_from((int[]){2, 2}, 2, (float[]){1, 3, 2, 4});
+    out = tensor_sum(tensor_mul(tensor_transpose(lhs, 0, 1), rhs), INT_MAX, 0);
+    tensor_backward(out, 0);
+    // transpose(lhs) = [[1,3],[2,4]], * coeff[[1,3],[2,4]] = element-wise
+    // grad_lhs = transpose(coeff) = [[1,2],[3,4]]
+    ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[1] == 2 &&
+           tensor_data(tensor_grad(lhs))[2] == 3 && tensor_data(tensor_grad(lhs))[3] == 4);
+
+    // tensor_expand: grad is summed over broadcast dims
+    lhs = tensor_requires_grad(tensor_from((int[]){1, 3}, 2, (float[]){1, 2, 3}));
+    out = tensor_sum(tensor_expand(lhs, (int[]){2, 3}, 2), INT_MAX, 0);
+    tensor_backward(out, 0);
+    // expanded to [[1,2,3],[1,2,3]], sum=12; each element accumulated twice
+    ensure(tensor_data(tensor_grad(lhs))[0] == 2 && tensor_data(tensor_grad(lhs))[1] == 2 &&
+           tensor_data(tensor_grad(lhs))[2] == 2);
+
+    // tensor_slice: grad scattered back into src positions; unsliced positions stay zero
+    lhs = tensor_requires_grad(tensor_from((int[]){5}, 1, (float[]){1, 2, 3, 4, 5}));
+    out = tensor_sum(tensor_slice(lhs, 0, 1, 4, 1), INT_MAX, 0);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 0 && tensor_data(tensor_grad(lhs))[1] == 1 &&
+           tensor_data(tensor_grad(lhs))[2] == 1 && tensor_data(tensor_grad(lhs))[3] == 1 &&
+           tensor_data(tensor_grad(lhs))[4] == 0);
+
+    // tensor_slice (non-contiguous): slice a transposed tensor
+    lhs = tensor_requires_grad(tensor_from((int[]){2, 3}, 2, (float[]){1, 2, 3, 4, 5, 6}));
+    Tensor *trans = tensor_transpose(lhs, 0, 1);  // shape [3, 2], stride [1, 3] (non-contiguous)
+    out = tensor_sum(tensor_slice(trans, 0, 0, 2, 1), INT_MAX, 0);  // slice first two rows of trans
+    tensor_backward(out, 0);
+    // trans[0,0]=1, trans[0,1]=4, trans[1,0]=2, trans[1,1]=5
+    // these correspond to lhs[0,0], lhs[1,0], lhs[0,1], lhs[1,1]
+    // grad_lhs should be [[1, 1, 0], [1, 1, 0]]
+    ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[1] == 1 &&
+           tensor_data(tensor_grad(lhs))[2] == 0 && tensor_data(tensor_grad(lhs))[3] == 1 &&
+           tensor_data(tensor_grad(lhs))[4] == 1 && tensor_data(tensor_grad(lhs))[5] == 0);
+
+    // tensor_cat: each input receives its slice of the gradient
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
+    rhs = tensor_requires_grad(tensor_from((int[]){2}, 1, (float[]){4, 5}));
+    out = tensor_sum(tensor_cat((const Tensor *[]){lhs, rhs}, 2, 0), INT_MAX, 0);
+    tensor_backward(out, 0);
+    ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[1] == 1 &&
+           tensor_data(tensor_grad(lhs))[2] == 1);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 1 && tensor_data(tensor_grad(rhs))[1] == 1);
+
     // tensor_neg: grad is negated
-    Tensor *lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
-    Tensor *out = tensor_neg(lhs);
+    lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
+    out = tensor_neg(lhs);
     tensor_backward(out, 0);
     ensure(tensor_data(tensor_grad(lhs))[0] == -1 && tensor_data(tensor_grad(lhs))[1] == -1 &&
            tensor_data(tensor_grad(lhs))[2] == -1);
@@ -679,7 +735,7 @@ static void test_autograd(void)
 
     // tensor_add: grad flows to both inputs
     lhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){1, 2, 3}));
-    Tensor *rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 5, 6}));
+    rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 5, 6}));
     out = tensor_add(lhs, rhs);
     tensor_backward(out, 0);
     ensure(tensor_data(tensor_grad(lhs))[0] == 1 && tensor_data(tensor_grad(lhs))[1] == 1 &&
