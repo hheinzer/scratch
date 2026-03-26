@@ -108,7 +108,7 @@ typedef union {
 } Saved;
 
 typedef struct {
-    int num_inputs;
+    int inputs;
     Tensor *input[3];
     Saved saved[3];
     void (*backward)(Tensor *);
@@ -845,7 +845,7 @@ Tensor *tensor_neg(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = neg_backward;
     }
@@ -868,7 +868,7 @@ Tensor *tensor_abs(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = abs_backward;
     }
@@ -901,7 +901,7 @@ Tensor *tensor_sqrt(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = sqrt_backward;
     }
@@ -926,7 +926,7 @@ Tensor *tensor_rsqrt(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = rsqrt_backward;
     }
@@ -949,7 +949,7 @@ Tensor *tensor_exp(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = exp_backward;
     }
@@ -972,7 +972,7 @@ Tensor *tensor_log(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = log_backward;
     }
@@ -995,7 +995,7 @@ Tensor *tensor_relu(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = relu_backward;
     }
@@ -1019,7 +1019,7 @@ Tensor *tensor_sigmoid(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = sigmoid_backward;
     }
@@ -1043,7 +1043,7 @@ Tensor *tensor_tanh(const Tensor *src)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->backward = tanh_backward;
     }
@@ -1163,7 +1163,7 @@ Tensor *tensor_add(const Tensor *lhs, const Tensor *rhs)
     if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 2;
+        out->ctx->inputs = 2;
         out->ctx->input[0] = (Tensor *)lhs;
         out->ctx->input[1] = (Tensor *)rhs;
         out->ctx->backward = add_backward;
@@ -1192,7 +1192,7 @@ Tensor *tensor_sub(const Tensor *lhs, const Tensor *rhs)
     if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 2;
+        out->ctx->inputs = 2;
         out->ctx->input[0] = (Tensor *)lhs;
         out->ctx->input[1] = (Tensor *)rhs;
         out->ctx->backward = sub_backward;
@@ -1221,7 +1221,7 @@ Tensor *tensor_mul(const Tensor *lhs, const Tensor *rhs)
     if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 2;
+        out->ctx->inputs = 2;
         out->ctx->input[0] = (Tensor *)lhs;
         out->ctx->input[1] = (Tensor *)rhs;
         out->ctx->backward = mul_backward;
@@ -1250,7 +1250,7 @@ Tensor *tensor_div(const Tensor *lhs, const Tensor *rhs)
     if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 2;
+        out->ctx->inputs = 2;
         out->ctx->input[0] = (Tensor *)lhs;
         out->ctx->input[1] = (Tensor *)rhs;
         out->ctx->backward = div_backward;
@@ -1281,7 +1281,7 @@ Tensor *tensor_pow(const Tensor *lhs, const Tensor *rhs)
     if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 2;
+        out->ctx->inputs = 2;
         out->ctx->input[0] = (Tensor *)lhs;
         out->ctx->input[1] = (Tensor *)rhs;
         out->ctx->backward = pow_backward;
@@ -1400,7 +1400,7 @@ Tensor *tensor_where(const Tensor *cond, const Tensor *if_true, const Tensor *if
     if (g_grad_enabled && (if_true->requires_grad || if_false->requires_grad)) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 3;
+        out->ctx->inputs = 3;
         out->ctx->input[0] = (Tensor *)cond;
         out->ctx->input[1] = (Tensor *)if_true;
         out->ctx->input[2] = (Tensor *)if_false;
@@ -1443,7 +1443,7 @@ Tensor *tensor_clamp(const Tensor *src, const Tensor *min, const Tensor *max)
     if (g_grad_enabled && (src->requires_grad || min->requires_grad || max->requires_grad)) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 3;
+        out->ctx->inputs = 3;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->input[1] = (Tensor *)min;
         out->ctx->input[2] = (Tensor *)max;
@@ -1584,7 +1584,7 @@ Tensor *tensor_min(const Tensor *src, int axis, int keepdim)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->saved[0].axis = axis;
         out->ctx->saved[1].keepdim = keepdim;
@@ -1617,7 +1617,7 @@ Tensor *tensor_max(const Tensor *src, int axis, int keepdim)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->saved[0].axis = axis;
         out->ctx->saved[1].keepdim = keepdim;
@@ -1656,7 +1656,7 @@ Tensor *tensor_sum(const Tensor *src, int axis, int keepdim)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->saved[0].axis = axis;
         out->ctx->saved[1].keepdim = keepdim;
@@ -1689,7 +1689,7 @@ Tensor *tensor_mean(const Tensor *src, int axis, int keepdim)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->saved[0].axis = axis;
         out->ctx->saved[1].keepdim = keepdim;
@@ -1722,7 +1722,7 @@ Tensor *tensor_var(const Tensor *src, int axis, int keepdim)
     if (g_grad_enabled && src->requires_grad) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 1;
+        out->ctx->inputs = 1;
         out->ctx->input[0] = (Tensor *)src;
         out->ctx->saved[0].axis = axis;
         out->ctx->saved[1].keepdim = keepdim;
@@ -1914,7 +1914,7 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
     if (g_grad_enabled && (lhs->requires_grad || rhs->requires_grad)) {
         out->requires_grad = 1;
         out->ctx = stack_calloc(1, sizeof(*out->ctx));
-        out->ctx->num_inputs = 2;
+        out->ctx->inputs = 2;
         out->ctx->input[0] = (Tensor *)lhs;
         out->ctx->input[1] = (Tensor *)rhs;
         out->ctx->backward = matmul_backward;
@@ -1959,6 +1959,23 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
     return out;
 }
 
+Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *target)
+{
+    assert(logit && target && logit->ndim == 2 && target->ndim == 1);
+    int batches = logit->shape[0];
+    int classes = logit->shape[1];
+    assert(target->shape[0] == batches);
+    float (*data)[classes] = stack_calloc(batches, sizeof(*data));
+    const float *labels = target->data;
+    for (int i = 0; i < batches; i++) {
+        data[i][(int)labels[i * target->stride[0]]] = 1;
+    }
+    Tensor *one_hot = tensor_wrap((int[]){batches, classes}, 2, *data);
+    Tensor *shifted = tensor_sub(logit, tensor_max(logit, 1, 1));
+    Tensor *log_softmax = tensor_sub(shifted, tensor_log(tensor_sum(tensor_exp(shifted), 1, 1)));
+    return tensor_neg(tensor_mean(tensor_sum(tensor_mul(one_hot, log_softmax), 1, 0), INT_MAX, 0));
+}
+
 // utility
 
 void tensor_shuffle(Tensor **self, int num, int axis)
@@ -2000,7 +2017,7 @@ static void build_topo(Tensor *self, Tensor **topo, int *count)
         }
     }
     if (self->ctx) {
-        for (int i = 0; i < self->ctx->num_inputs; i++) {
+        for (int i = 0; i < self->ctx->inputs; i++) {
             build_topo(self->ctx->input[i], topo, count);
         }
     }
@@ -2143,7 +2160,7 @@ static void print_backward(const Tensor *self, int depth)
     }
     printf("\n");
     if (self->ctx) {
-        for (int i = 0; i < self->ctx->num_inputs; i++) {
+        for (int i = 0; i < self->ctx->inputs; i++) {
             print_backward(self->ctx->input[i], depth + 1);
         }
     }

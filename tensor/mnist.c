@@ -3,7 +3,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 
 #include "tensor.h"
@@ -16,18 +15,18 @@ static Tensor *forward(Tensor *X, Tensor *W1, Tensor *b1, Tensor *W2, Tensor *b2
     return tensor_add(tensor_matmul(tensor_relu(tensor_add(tensor_matmul(X, W1), b1)), W2), b2);
 }
 
-static Tensor *cross_entropy(Tensor *logit, const float *label, int batch)
+static void update(Tensor *param, float lr)
 {
-    float one[batch * 10];
-    memset(one, 0, sizeof(one));
-    for (int i = 0; i < batch; i++) {
-        one[(i * 10) + (int)label[i]] = 1;
+    Tensor *grad = tensor_grad(param);
+    if (!grad) {
+        return;
     }
-    Tensor *one_hot = tensor_from((int[]){batch, 10}, 2, one);
-    Tensor *max = tensor_max(logit, 1, 1);  // subtract max per row for numerical stability
-    Tensor *shifted = tensor_sub(logit, max);
-    Tensor *log_softmax = tensor_sub(shifted, tensor_log(tensor_sum(tensor_exp(shifted), 1, 1)));
-    return tensor_neg(tensor_mean(tensor_sum(tensor_mul(one_hot, log_softmax), 1, 0), INT_MAX, 0));
+    float *pdata = tensor_data(param);
+    float *gdata = tensor_data(grad);
+    for (long i = 0; i < tensor_numel(param); i++) {
+        pdata[i] -= lr * gdata[i];
+    }
+    tensor_zero_grad(param);
 }
 
 static float accuracy(Tensor *X, Tensor *y, Tensor *W1, Tensor *b1, Tensor *W2, Tensor *b2)
@@ -54,20 +53,6 @@ static float accuracy(Tensor *X, Tensor *y, Tensor *W1, Tensor *b1, Tensor *W2, 
     return (float)correct / (float)n;
 }
 
-static void update(Tensor *param, float lr)
-{
-    Tensor *grad = tensor_grad(param);
-    if (!grad) {
-        return;
-    }
-    float *pdata = tensor_data(param);
-    float *gdata = tensor_data(grad);
-    for (long i = 0; i < tensor_numel(param); i++) {
-        pdata[i] -= lr * gdata[i];
-    }
-    tensor_zero_grad(param);
-}
-
 int main(void)
 {
     tensor_frame_begin();
@@ -84,8 +69,6 @@ int main(void)
     Tensor *b2 = tensor_requires_grad(tensor_zeros((int[]){1, 10}, 2));
 
     Tensor *params[] = {W1, b1, W2, b2};
-    float *y_data = tensor_data(y_train);
-
     int n_train = tensor_shape(X_train)[0];
     for (int epoch = 0; epoch < 10; epoch++) {
         tensor_shuffle((Tensor *[]){X_train, y_train}, 2, 0);
@@ -97,7 +80,8 @@ int main(void)
 
             int batch = (i + BATCH <= n_train) ? BATCH : (n_train - i);
             Tensor *X_b = tensor_slice(X_train, 0, i, i + batch, 1);
-            Tensor *loss = cross_entropy(forward(X_b, W1, b1, W2, b2), y_data + i, batch);
+            Tensor *y_b = tensor_slice(y_train, 0, i, i + batch, 1);
+            Tensor *loss = tensor_cross_entropy(forward(X_b, W1, b1, W2, b2), y_b);
             tensor_backward(loss, 0);
 
             if (epoch == 0 && i == 0) {
