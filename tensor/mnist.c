@@ -34,6 +34,8 @@ static void update(Tensor *param, Tensor *vel, float lr, float momentum)
 
 static float accuracy(Tensor *X, Tensor *y, Tensor *W1, Tensor *b1, Tensor *W2, Tensor *b2)
 {
+    tensor_frame_begin();
+
     tensor_no_grad_begin();
     Tensor *logit = forward(X, W1, b1, W2, b2);
     tensor_no_grad_end();
@@ -53,7 +55,10 @@ static float accuracy(Tensor *X, Tensor *y, Tensor *W1, Tensor *b1, Tensor *W2, 
             correct += 1;
         }
     }
-    return (float)correct / (float)n;
+    float result = (float)correct / (float)n;
+
+    tensor_frame_end();
+    return result;
 }
 
 int main(void)
