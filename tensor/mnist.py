@@ -50,8 +50,9 @@ for epoch in range(epochs):
         total_loss += loss.item()
         n_batches += 1
 
-    print(f"Epoch {epoch + 1:2d}  Loss: {total_loss / n_batches:.4f}")
-
-with torch.no_grad():
-    acc = (forward(X_test).argmax(dim=1) == y_test).float().mean()
-    print(f"\nTest accuracy: {acc.item() * 100:.1f}%")
+    with torch.no_grad():
+        print(
+            f"Epoch {epoch + 1:2d}  "
+            "Loss: {total_loss / n_batches:.4f}  "
+            "Accuracy: {(forward(X_test).argmax(dim=1) == y_test).float().mean().item() * 100:.1f}%"
+        )

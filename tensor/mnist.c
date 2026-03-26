@@ -96,10 +96,9 @@ int main(void)
             tensor_frame_end();
         }
 
-        printf("Epoch %2d  Loss: %.4f\n", epoch + 1, total_loss / (float)n_batches);
+        printf("Epoch %2d  Loss: %.4f  Accuracy: %.1f%%\n", epoch + 1,
+               total_loss / (float)n_batches, 100 * accuracy(X_test, y_test, W1, b1, W2, b2));
     }
-
-    printf("\nTest accuracy: %.1f%%\n", 100 * accuracy(X_test, y_test, W1, b1, W2, b2));
 
     tensor_frame_end();
 }
