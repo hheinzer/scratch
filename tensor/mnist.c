@@ -7,15 +7,16 @@
 
 #include "tensor.h"
 
-#define BATCH 64
-#define LR 0.01F
+#define BATCH 128
+#define LR 0.1F
+#define MOMENTUM 0.9F
 
 static Tensor *forward(Tensor *X, Tensor *W1, Tensor *b1, Tensor *W2, Tensor *b2)
 {
     return tensor_add(tensor_matmul(tensor_relu(tensor_add(tensor_matmul(X, W1), b1)), W2), b2);
 }
 
-static void update(Tensor *param, float lr)
+static void update(Tensor *param, Tensor *vel, float lr, float momentum)
 {
     Tensor *grad = tensor_grad(param);
     if (!grad) {
@@ -23,8 +24,10 @@ static void update(Tensor *param, float lr)
     }
     float *pdata = tensor_data(param);
     float *gdata = tensor_data(grad);
+    float *vdata = tensor_data(vel);
     for (long i = 0; i < tensor_numel(param); i++) {
-        pdata[i] -= lr * gdata[i];
+        vdata[i] = (momentum * vdata[i]) + gdata[i];
+        pdata[i] -= lr * vdata[i];
     }
     tensor_zero_grad(param);
 }
@@ -65,10 +68,17 @@ int main(void)
     srand((unsigned)time(0));
     Tensor *W1 = tensor_requires_grad(tensor_normal((int[]){784, 128}, 2, 0, sqrtf(2 / 784.F)));
     Tensor *b1 = tensor_requires_grad(tensor_zeros((int[]){1, 128}, 2));
-    Tensor *W2 = tensor_requires_grad(tensor_normal((int[]){128, 10}, 2, 0, sqrtf(2 / 128.F)));
+    Tensor *W2 = tensor_requires_grad(tensor_normal((int[]){128, 10}, 2, 0, sqrtf(1 / 128.F)));
     Tensor *b2 = tensor_requires_grad(tensor_zeros((int[]){1, 10}, 2));
 
+    Tensor *vW1 = tensor_zeros(tensor_shape(W1), tensor_ndim(W1));
+    Tensor *vb1 = tensor_zeros(tensor_shape(b1), tensor_ndim(b1));
+    Tensor *vW2 = tensor_zeros(tensor_shape(W2), tensor_ndim(W2));
+    Tensor *vb2 = tensor_zeros(tensor_shape(b2), tensor_ndim(b2));
+
     Tensor *params[] = {W1, b1, W2, b2};
+    Tensor *vels[] = {vW1, vb1, vW2, vb2};
+
     int n_train = tensor_shape(X_train)[0];
     for (int epoch = 0; epoch < 10; epoch++) {
         tensor_shuffle((Tensor *[]){X_train, y_train}, 2, 0);
@@ -86,7 +96,7 @@ int main(void)
 
             tensor_no_grad_begin();
             for (int k = 0; k < 4; k++) {
-                update(params[k], LR);
+                update(params[k], vels[k], LR, MOMENTUM);
             }
             tensor_no_grad_end();
 
