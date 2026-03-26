@@ -35,6 +35,8 @@ Tensor *tensor_normal(const int *shape, int ndim, float mean, float std);
 
 // movement: return views where possible
 
+Tensor *tensor_clone(const Tensor *src);
+Tensor *tensor_detach(const Tensor *src);
 Tensor *tensor_reshape(const Tensor *src, const int *shape, int ndim);  // use -1 to infer one dim
 Tensor *tensor_flatten(const Tensor *src, int beg_dim, int end_dim);  // INT_MIN/INT_MAX flatten all
 Tensor *tensor_squeeze(const Tensor *src, int dim);  // INT_MAX removes all dims of size 1
@@ -47,8 +49,6 @@ Tensor *tensor_expand(const Tensor *src, const int *shape, int ndim);  // -1 pre
 Tensor *tensor_cat(const Tensor **src, int num, int dim);
 Tensor *tensor_stack(const Tensor **src, int num, int dim);
 Tensor *tensor_contiguous(const Tensor *src);  // view if already contiguous, copy otherwise
-Tensor *tensor_clone(const Tensor *src);
-Tensor *tensor_detach(const Tensor *src);
 
 // unary
 

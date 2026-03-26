@@ -326,30 +326,6 @@ Tensor *tensor_normal(const int *shape, int ndim, float mean, float std)
 
 // movement
 
-static void normalize_shape(int *out_shape, const int *shape, int ndim, long numel)
-{
-    int index = -1;
-    long product = 1;
-    for (int i = 0; i < ndim; i++) {
-        if (shape[i] == -1) {
-            assert(index == -1);
-            index = i;
-        }
-        else {
-            assert(shape[i] > 0);
-            product *= shape[i];
-        }
-        out_shape[i] = shape[i];
-    }
-    if (index != -1) {
-        assert(product > 0 && numel % product == 0);
-        out_shape[index] = (int)(numel / product);
-    }
-    else {
-        assert(product == numel);
-    }
-}
-
 static int is_contiguous(const Tensor *src)
 {
     long stride = 1;
@@ -380,6 +356,54 @@ static void pack_data(Tensor *out, long *offset_out, const Tensor *src, long off
         for (int i = 0; i < src->shape[dim]; i++) {
             pack_data(out, offset_out, src, offset_src + (i * src->stride[dim]), dim + 1);
         }
+    }
+}
+
+Tensor *tensor_clone(const Tensor *src)
+{
+    assert(src);
+    Tensor *out = tensor_empty(src->shape, src->ndim);
+    if (is_contiguous(src)) {
+        memcpy(out->data, src->data, src->numel * sizeof(*src->data));
+    }
+    else {
+        long offset = 0;
+        pack_data(out, &offset, src, 0, 0);
+    }
+    return out;
+}
+
+Tensor *tensor_detach(const Tensor *src)
+{
+    assert(src);
+    Tensor *out = stack_memdup(src, 1, sizeof(*out));
+    out->requires_grad = 0;
+    out->grad = 0;
+    out->ctx = 0;
+    return out;
+}
+
+static void normalize_shape(int *out_shape, const int *shape, int ndim, long numel)
+{
+    int index = -1;
+    long product = 1;
+    for (int i = 0; i < ndim; i++) {
+        if (shape[i] == -1) {
+            assert(index == -1);
+            index = i;
+        }
+        else {
+            assert(shape[i] > 0);
+            product *= shape[i];
+        }
+        out_shape[i] = shape[i];
+    }
+    if (index != -1) {
+        assert(product > 0 && numel % product == 0);
+        out_shape[index] = (int)(numel / product);
+    }
+    else {
+        assert(product == numel);
     }
 }
 
@@ -515,8 +539,6 @@ Tensor *tensor_transpose(const Tensor *src, int dim0, int dim1)
     order[dim0] = dim1;
     order[dim1] = dim0;
     return tensor_permute(src, order);
-}
-
 }
 
 Tensor *tensor_slice(const Tensor *src, int dim, int beg, int end, int step)
@@ -677,30 +699,6 @@ Tensor *tensor_stack(const Tensor **src, int num, int dim)
 Tensor *tensor_contiguous(const Tensor *src)
 {
     return tensor_reshape(src, src->shape, src->ndim);
-}
-
-Tensor *tensor_clone(const Tensor *src)
-{
-    assert(src);
-    Tensor *out = tensor_empty(src->shape, src->ndim);
-    if (is_contiguous(src)) {
-        memcpy(out->data, src->data, src->numel * sizeof(*src->data));
-    }
-    else {
-        long offset = 0;
-        pack_data(out, &offset, src, 0, 0);
-    }
-    return out;
-}
-
-Tensor *tensor_detach(const Tensor *src)
-{
-    assert(src);
-    Tensor *out = stack_memdup(src, 1, sizeof(*out));
-    out->requires_grad = 0;
-    out->grad = 0;
-    out->ctx = 0;
-    return out;
 }
 
 // unary
