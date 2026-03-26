@@ -44,9 +44,10 @@ computation graph.
 
 ## Operations
 
-All operations allocate new tensors inside the current frame; inputs are never modified in place.
-Binary operations and reductions support broadcasting. Reductions accept an `axis` argument;
-`INT_MAX` reduces over all dimensions. `keepdim=1` retains the reduced axis as a size-1 dimension.
+All operations (except `tensor_shuffle`) allocate new tensors inside the current frame; inputs are
+never modified in place. Binary and ternary operations and reductions support broadcasting.
+Reductions accept an `axis` argument; `INT_MAX` reduces over all dimensions. `keepdim=1` retains the
+reduced axis as a size-1 dimension.
 
 **Creation** `tensor_from` copies data; `tensor_wrap` creates a view over an existing pointer
 without copying. Random tensors: `tensor_rand` (uniform [0, 1)), `tensor_uniform` (uniform [low,
@@ -59,8 +60,9 @@ high)), `tensor_randn` (standard normal), `tensor_normal` (normal with given mea
 **Unary** `tensor_neg`, `tensor_abs`, `tensor_sign`, `tensor_square`, `tensor_sqrt`, `tensor_rsqrt`,
 `tensor_exp`, `tensor_log`, `tensor_relu`, `tensor_sigmoid`, `tensor_tanh`.
 
-**Binary** `tensor_add`, `tensor_sub`, `tensor_mul`, `tensor_div`, `tensor_pow`, `tensor_where`,
-`tensor_clamp`.
+**Binary** `tensor_add`, `tensor_sub`, `tensor_mul`, `tensor_div`, `tensor_pow`.
+
+**Ternary** `tensor_where`, `tensor_clamp`.
 
 **Reduction** `tensor_min`, `tensor_max`, `tensor_sum`, `tensor_mean`, `tensor_var`, `tensor_std`,
 `tensor_norm`. Argmin/argmax write into a caller-allocated array of indices.
@@ -68,8 +70,8 @@ high)), `tensor_randn` (standard normal), `tensor_normal` (normal with given mea
 **`tensor_matmul`** Matrix multiply. Supports batched matmul with broadcasting over leading
 dimensions, and handles transposed inputs without copying.
 
-**`tensor_shuffle`** Apply the same random permutation to a set of tensors along a given axis.
-Useful for shuffling paired arrays (e.g. inputs and labels) in lockstep.
+**`tensor_shuffle`** In-place operation. Apply the same random permutation to a set of tensors
+along a given axis. Useful for shuffling paired arrays (e.g. inputs and labels) in lockstep.
 
 ## I/O
 
