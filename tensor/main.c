@@ -743,6 +743,18 @@ static void test_autograd(void)
     ensure(tensor_data(tensor_grad(rhs))[0] == 1 && tensor_data(tensor_grad(rhs))[1] == 1 &&
            tensor_data(tensor_grad(rhs))[2] == 1);
 
+    // tensor_add (broadcasting): grad is summed over broadcasted dims
+    lhs = tensor_requires_grad(tensor_from((int[]){1, 3}, 2, (float[]){1, 2, 3}));
+    rhs = tensor_requires_grad(tensor_from((int[]){2, 1}, 2, (float[]){4, 5}));
+    out = tensor_sum(tensor_add(lhs, rhs), INT_MAX, 0);
+    tensor_backward(out, 0);
+    // lhs[[1,2,3],[1,2,3]] + rhs[[4,4,4],[5,5,5]] = [[5,6,7],[6,7,8]]
+    // grad_lhs should be [[2, 2, 2]] (each element added twice)
+    // grad_rhs should be [[3], [3]] (each element added three times)
+    ensure(tensor_data(tensor_grad(lhs))[0] == 2 && tensor_data(tensor_grad(lhs))[1] == 2 &&
+           tensor_data(tensor_grad(lhs))[2] == 2);
+    ensure(tensor_data(tensor_grad(rhs))[0] == 3 && tensor_data(tensor_grad(rhs))[1] == 3);
+
     // tensor_add: grad does not appear on input without requires_grad
     lhs = tensor_from((int[]){3}, 1, (float[]){1, 2, 3});
     rhs = tensor_requires_grad(tensor_from((int[]){3}, 1, (float[]){4, 5, 6}));

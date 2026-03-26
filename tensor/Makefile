@@ -6,7 +6,7 @@ CFLAGS = -std=c99 -g3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-c
 #CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined
 
 # release
-CFLAGS += -O3 -march=native -flto=auto -DNDEBUG -Wno-unused -Wno-maybe-uninitialized
+CFLAGS += -O3 -march=native -flto=auto -DNDEBUG -Wno-unused
 
 # profile
 #CFLAGS += -fno-omit-frame-pointer -fno-inline-functions
@@ -21,11 +21,11 @@ clean:
 test: main
 	@./main
 
-main: main.c tensor.c tensor.h
+main: main.c tensor.c
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
 
-xor: xor.c tensor.c tensor.h
+xor: xor.c tensor.c
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@
 
-mnist: mnist.c tensor.c tensor.h
+mnist: mnist.c tensor.c
 	@$(CC) $(CFLAGS) $^ $(LDLIBS) -o $@

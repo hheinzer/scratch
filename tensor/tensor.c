@@ -373,8 +373,8 @@ static void ensure_grad(Tensor *self)
     stack_save();
 }
 
-static void reduce_grad(const Tensor *self, long offset_self, const Tensor *src, long offset_src,
-                        int dim_self, int dim_src)
+static void reduce_grad(const Tensor *self, const long *stride_self, long offset_self,
+                        const Tensor *src, long offset_src, int dim_self, int dim_src)
 {
     if (dim_src == src->ndim) {
         self->grad[offset_self] += src->data[offset_src];
@@ -383,23 +383,19 @@ static void reduce_grad(const Tensor *self, long offset_self, const Tensor *src,
     int extra = src->ndim - self->ndim;
     if (dim_src < extra) {
         for (int i = 0; i < src->shape[dim_src]; i++) {
-            reduce_grad(self, offset_self, src, offset_src + (i * src->stride[dim_src]), dim_self,
-                        dim_src + 1);
+            reduce_grad(self, stride_self, offset_self, src,
+                        offset_src + (i * src->stride[dim_src]), dim_self, dim_src + 1);
         }
     }
     else if (self->shape[dim_self] == 1) {
         for (int i = 0; i < src->shape[dim_src]; i++) {
-            reduce_grad(self, offset_self, src, offset_src + (i * src->stride[dim_src]),
-                        dim_self + 1, dim_src + 1);
+            reduce_grad(self, stride_self, offset_self, src,
+                        offset_src + (i * src->stride[dim_src]), dim_self + 1, dim_src + 1);
         }
     }
     else {
-        long stride = 1;
-        for (int k = dim_self + 1; k < self->ndim; k++) {
-            stride *= self->shape[k];
-        }
         for (int i = 0; i < self->shape[dim_self]; i++) {
-            reduce_grad(self, offset_self + (i * stride), src,
+            reduce_grad(self, stride_self, offset_self + (i * stride_self[dim_self]), src,
                         offset_src + (i * src->stride[dim_src]), dim_self + 1, dim_src + 1);
         }
     }
@@ -426,7 +422,9 @@ static void accumulate_grad(Tensor *self, const Tensor *grad)
         }
     }
     else {
-        reduce_grad(self, 0, grad, 0, 0, 0);
+        long stride[MAX_NDIM];
+        compute_stride(stride, self->shape, self->ndim);
+        reduce_grad(self, stride, 0, grad, 0, 0, 0);
     }
     stack_restore();
 }
@@ -1345,10 +1343,12 @@ static void apply_binary(Tensor *out, long offset_out, const Tensor *lhs, long o
 static Tensor *binary(const Tensor *lhs, const Tensor *rhs, Binary *func)
 {
     assert(lhs && rhs && func);
-    int shape[MAX_NDIM];
+    int shape[MAX_NDIM] = {0};
     int ndim = broadcast_binary(shape, lhs, rhs);
+    tensor_no_grad_begin();
     lhs = tensor_expand(lhs, shape, ndim);
     rhs = tensor_expand(rhs, shape, ndim);
+    tensor_no_grad_end();
     Tensor *out = tensor_empty(shape, ndim);
     if (ndim == 0) {
         func(out->data, lhs->data, 0, rhs->data, 0, 1);
@@ -1578,11 +1578,13 @@ static void apply_ternary(Tensor *out, long offset_out, const Tensor *lhs, long 
 static Tensor *ternary(const Tensor *lhs, const Tensor *mid, const Tensor *rhs, Ternary *func)
 {
     assert(lhs && mid && rhs && func);
-    int shape[MAX_NDIM];
+    int shape[MAX_NDIM] = {0};
     int ndim = broadcast_ternary(shape, lhs, mid, rhs);
+    tensor_no_grad_begin();
     lhs = tensor_expand(lhs, shape, ndim);
     mid = tensor_expand(mid, shape, ndim);
     rhs = tensor_expand(rhs, shape, ndim);
+    tensor_no_grad_end();
     Tensor *out = tensor_empty(shape, ndim);
     if (ndim == 0) {
         func(out->data, lhs->data, 0, mid->data, 0, rhs->data, 0, 1);
