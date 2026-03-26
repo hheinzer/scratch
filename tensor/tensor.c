@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef USE_BLAS
+#include <cblas.h>
+#endif
+
 // memory
 
 enum { MAX_SAVE = 1024 };
@@ -2085,6 +2089,12 @@ static const Tensor *matmul_prepare(const Tensor *src, long *stride, int *trans)
 static void matmul(float *out, long stride_out, const float *lhs, long stride_lhs, const float *rhs,
                    long stride_rhs, int rows, int cols, int inner, int trans_lhs, int trans_rhs)
 {
+#ifdef USE_BLAS
+    assert(stride_lhs <= INT_MAX && stride_rhs <= INT_MAX && stride_out <= INT_MAX);
+    cblas_sgemm(CblasRowMajor, trans_lhs ? CblasTrans : CblasNoTrans,
+                trans_rhs ? CblasTrans : CblasNoTrans, rows, cols, inner, 1, lhs, (int)stride_lhs,
+                rhs, (int)stride_rhs, 0, out, (int)stride_out);
+#else
     for (int i = 0; i < rows; i++) {
         memset(out + (i * stride_out), 0, cols * sizeof(*out));
         for (int k = 0; k < inner; k++) {
@@ -2095,11 +2105,20 @@ static void matmul(float *out, long stride_out, const float *lhs, long stride_lh
             }
         }
     }
+#endif
 }
 
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
 {
     assert(lhs && rhs && lhs->ndim >= 2 && rhs->ndim >= 2);
+
+#ifdef USE_BLAS
+    static int blas_init = 0;
+    if (!blas_init) {
+        openblas_set_num_threads(1);
+        blas_init = 1;
+    }
+#endif
 
     int rows = lhs->shape[lhs->ndim - 2];
     int cols = rhs->shape[rhs->ndim - 1];
