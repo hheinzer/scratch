@@ -427,7 +427,9 @@ static void accumulate_grad(Tensor *self, const Tensor *grad)
     }
     else {
         long stride[MAX_NDIM];
-        compute_stride(stride, self->shape, self->ndim);
+        if (self->ndim > 0) {
+            compute_stride(stride, self->shape, self->ndim);
+        }
         reduce_grad(self, stride, 0, grad, 0, 0, 0);
     }
     stack_restore();
