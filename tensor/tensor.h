@@ -95,6 +95,8 @@ void tensor_argmax(const Tensor *src, long *index, int axis);
 // processing
 
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);  // supports batched with broadcasting
+Tensor *tensor_conv2d(const Tensor *src, const Tensor *weight, const Tensor *bias, int stride,
+                      int padding);
 
 // loss
 

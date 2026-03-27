@@ -573,6 +573,30 @@ static void test_processing(void)
     ensure(tensor_data(out)[0] == 6 && tensor_data(out)[1] == 3 && tensor_data(out)[2] == 8 &&
            tensor_data(out)[3] == 4);
 
+    // tensor_conv2d: [1,1,3,3] input, [1,1,2,2] kernel [[1,0],[0,1]], no bias
+    // out[h,w] = in[h,w]*1 + in[h+1,w+1]*1
+    Tensor *input = tensor_from((int[]){1, 1, 3, 3}, 4, (float[]){1, 2, 3, 4, 5, 6, 7, 8, 9});
+    Tensor *weight = tensor_from((int[]){1, 1, 2, 2}, 4, (float[]){1, 0, 0, 1});
+    out = tensor_conv2d(input, weight, 0, 1, 0);
+    ensure(tensor_ndim(out) == 4 && tensor_shape(out)[0] == 1 && tensor_shape(out)[1] == 1 &&
+           tensor_shape(out)[2] == 2 && tensor_shape(out)[3] == 2);
+    ensure(tensor_data(out)[0] == 6 && tensor_data(out)[1] == 8 && tensor_data(out)[2] == 12 &&
+           tensor_data(out)[3] == 14);
+
+    // bias adds a constant to each output channel
+    Tensor *bias = tensor_from((int[]){1}, 1, (float[]){1});
+    out = tensor_conv2d(input, weight, bias, 1, 0);
+    ensure(tensor_data(out)[0] == 7 && tensor_data(out)[3] == 15);
+
+    // padding=1 with 2x2 kernel: (3+2*1-2)/1+1=4
+    out = tensor_conv2d(input, weight, 0, 1, 1);
+    ensure(tensor_shape(out)[2] == 4 && tensor_shape(out)[3] == 4);
+
+    // stride=2 reduces spatial dims: (3-2)/2+1=1
+    out = tensor_conv2d(input, weight, 0, 2, 0);
+    ensure(tensor_shape(out)[2] == 1 && tensor_shape(out)[3] == 1);
+    ensure(tensor_data(out)[0] == 6);
+
     tensor_frame_end();
 }
 
@@ -993,6 +1017,18 @@ static void test_autograd(void)
     ensure(tensor_data(tensor_grad(rhs))[0] == 5 && tensor_data(tensor_grad(rhs))[1] == 5 &&
            tensor_data(tensor_grad(rhs))[2] == 7 && tensor_data(tensor_grad(rhs))[3] == 7 &&
            tensor_data(tensor_grad(rhs))[4] == 9 && tensor_data(tensor_grad(rhs))[5] == 9);
+
+    // tensor_conv2d: grad_weight[co,ci,kr,ks] = sum_{h,w} grad_out[h,w] * in[h+kr, w+ks]
+    // with grad_out=ones: grad_weight[kr,ks] = sum of 2x2 input patch at offset (kr,ks)
+    Tensor *src = tensor_requires_grad(
+        tensor_from((int[]){1, 1, 3, 3}, 4, (float[]){1, 2, 3, 4, 5, 6, 7, 8, 9}));
+    Tensor *weight =
+        tensor_requires_grad(tensor_from((int[]){1, 1, 2, 2}, 4, (float[]){1, 0, 0, 1}));
+    out = tensor_conv2d(src, weight, 0, 1, 0);
+    tensor_backward(out, 0);
+    ensure(tensor_grad(weight));
+    float *gweight = tensor_data(tensor_grad(weight));
+    ensure(gweight[0] == 12 && gweight[1] == 16 && gweight[2] == 24 && gweight[3] == 28);
 
     tensor_frame_end();
 }
