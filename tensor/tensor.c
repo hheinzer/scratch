@@ -2140,7 +2140,7 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
 
     int ndim = (lhs->ndim > rhs->ndim) ? lhs->ndim : rhs->ndim;
     int shape[MAX_NDIM];
-    long batches = 1;
+    long batch = 1;
     for (int i = 0; i < ndim - 2; i++) {
         int dim_lhs = i - (ndim - lhs->ndim);
         int dim_rhs = i - (ndim - rhs->ndim);
@@ -2148,7 +2148,7 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
         int size_rhs = (dim_rhs >= 0) ? rhs->shape[dim_rhs] : 1;
         assert(size_lhs == size_rhs || size_lhs == 1 || size_rhs == 1);
         shape[i] = (size_lhs > size_rhs) ? size_lhs : size_rhs;
-        batches *= shape[i];
+        batch *= shape[i];
     }
     shape[ndim - 2] = rows;
     shape[ndim - 1] = cols;
@@ -2176,7 +2176,7 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
     long stride_rhs;
     rhs = matmul_prepare(rhs, &stride_rhs, &trans_rhs);
 
-    for (long i = 0; i < batches; i++) {
+    for (long i = 0; i < batch; i++) {
         long offset_lhs = 0;
         long offset_rhs = 0;
         long remaining = i;
@@ -2194,10 +2194,10 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
             }
             remaining /= shape[j];
         }
-        float *out_data = out->data + (i * stride_batch);
-        const float *lhs_data = lhs->data + offset_lhs;
-        const float *rhs_data = rhs->data + offset_rhs;
-        matmul(out_data, stride_out, lhs_data, stride_lhs, rhs_data, stride_rhs, rows, cols, inner,
+        float *data_out = out->data + (i * stride_batch);
+        const float *data_lhs = lhs->data + offset_lhs;
+        const float *data_rhs = rhs->data + offset_rhs;
+        matmul(data_out, stride_out, data_lhs, stride_lhs, data_rhs, stride_rhs, rows, cols, inner,
                trans_lhs, trans_rhs);
     }
 
@@ -2391,15 +2391,15 @@ Tensor *tensor_mse(const Tensor *pred, const Tensor *target)
 Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *label)
 {
     assert(logit && label && logit->ndim == 2 && label->ndim == 1);
-    int batches = logit->shape[0];
+    int batch = logit->shape[0];
     int classes = logit->shape[1];
-    assert(label->shape[0] == batches);
-    float (*buf)[classes] = stack_calloc(batches, sizeof(*buf));
+    assert(label->shape[0] == batch);
+    float (*buf)[classes] = stack_calloc(batch, sizeof(*buf));
     const float *idx = label->data;
-    for (int i = 0; i < batches; i++) {
+    for (int i = 0; i < batch; i++) {
         buf[i][(int)idx[i * label->stride[0]]] = 1;
     }
-    Tensor *one_hot = tensor_wrap((int[]){batches, classes}, 2, *buf);
+    Tensor *one_hot = tensor_wrap((int[]){batch, classes}, 2, *buf);
     Tensor *shifted = tensor_sub(logit, tensor_max(logit, 1, 1));
     Tensor *log_softmax = tensor_sub(shifted, tensor_log(tensor_sum(tensor_exp(shifted), 1, 1)));
     return tensor_neg(tensor_mean(tensor_sum(tensor_mul(one_hot, log_softmax), 1, 0), INT_MAX, 0));
