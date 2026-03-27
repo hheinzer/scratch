@@ -50,12 +50,15 @@ Reductions accept an `axis` argument; `INT_MAX` reduces over all dimensions. `ke
 reduced axis as a size-1 dimension.
 
 **Creation** `tensor_from` copies data; `tensor_wrap` creates a view over an existing pointer
-without copying. Random tensors: `tensor_rand` (uniform [0, 1)), `tensor_uniform` (uniform [low,
-high)), `tensor_randn` (standard normal), `tensor_normal` (normal with given mean and std).
+without copying; `tensor_scalar` wraps a single float. `tensor_fill` fills with a constant. Random
+tensors: `tensor_rand` (uniform [0, 1)), `tensor_uniform` (uniform [low, high)), `tensor_randn`
+(standard normal), `tensor_normal` (normal with given mean and std).
 
 **Movement** `tensor_reshape`, `tensor_flatten`, `tensor_squeeze`, `tensor_unsqueeze`,
 `tensor_transpose`, `tensor_permute`, `tensor_slice`, `tensor_select`, `tensor_expand`,
 `tensor_cat`, `tensor_stack`. Most return views; a copy is made only when the layout requires it.
+`tensor_clone` always returns a contiguous copy. `tensor_detach` returns a copy with autograd
+disabled. `tensor_contiguous` returns a view if the tensor is already contiguous, otherwise a copy.
 
 **Unary** `tensor_neg`, `tensor_abs`, `tensor_sign`, `tensor_square`, `tensor_sqrt`, `tensor_rsqrt`,
 `tensor_exp`, `tensor_log`, `tensor_relu`, `tensor_sigmoid`, `tensor_tanh`.
@@ -70,13 +73,14 @@ high)), `tensor_randn` (standard normal), `tensor_normal` (normal with given mea
 **`tensor_matmul`** Matrix multiply. Supports batched matmul with broadcasting over leading
 dimensions, and handles transposed inputs without copying.
 
-**`tensor_shuffle`** In-place operation. Apply the same random permutation to a set of tensors
-along a given axis. Useful for shuffling paired arrays (e.g. inputs and labels) in lockstep.
+**Loss** `tensor_mse` (mean squared error), `tensor_cross_entropy` (softmax cross-entropy; expects
+raw logits and integer class labels).
 
-## I/O
+**`tensor_shuffle`** In-place operation. Apply the same random permutation to a set of tensors along
+a given axis. Useful for shuffling paired arrays (e.g. inputs and labels) in lockstep.
 
-`tensor_save` and `tensor_load` use the NumPy NPY format, making it straightforward to exchange
-tensors with Python.
+**I/O** `tensor_print` prints shape and data to stdout. `tensor_save` and `tensor_load` use the
+NumPy NPY format, making it straightforward to exchange tensors with Python.
 
 ## Implementation notes
 
