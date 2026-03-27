@@ -18,13 +18,15 @@ def forward(X):
 lr = 0.1
 for epoch in range(5000):
     pred = forward(X)
-    loss = ((pred - y) ** 2).mean()
+    loss = torch.nn.functional.mse_loss(pred, y)
     loss.backward()
 
     with torch.no_grad():
         for p in [W1, b1, W2, b2]:
-            p -= lr * p.grad
-            p.grad.zero_()
+            grad = p.grad
+            if grad is not None:
+                p -= lr * grad
+                grad.zero_()
 
     if (epoch + 1) % 1000 == 0:
         print(f"Epoch {epoch+1:4d}  Loss: {loss.item():.4f}")

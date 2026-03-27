@@ -47,7 +47,7 @@ int main(void)
         tensor_frame_begin();
 
         Tensor *pred = forward(X, W1, b1, W2, b2);
-        Tensor *loss = tensor_mean(tensor_square(tensor_sub(pred, y)), INT_MAX, 0);
+        Tensor *loss = tensor_mse(pred, y);
         tensor_backward(loss, 0);
 
         tensor_no_grad_begin();

@@ -576,6 +576,31 @@ static void test_processing(void)
     tensor_frame_end();
 }
 
+static void test_loss(void)
+{
+    tensor_frame_begin();
+
+    // tensor_mse: mean of squared differences; (0+1+4+9)/4 = 3.5
+    Tensor *pred = tensor_from((int[]){4}, 1, (float[]){1, 2, 3, 4});
+    Tensor *target = tensor_from((int[]){4}, 1, (float[]){1, 1, 1, 1});
+    Tensor *loss = tensor_mse(pred, target);
+    ensure(tensor_ndim(loss) == 0 && isclose(tensor_data(loss)[0], 3.5F));
+
+    // tensor_cross_entropy: uniform logits give log(num_classes)
+    Tensor *logit = tensor_from((int[]){1, 3}, 2, (float[]){0, 0, 0});
+    Tensor *label = tensor_from((int[]){1}, 1, (float[]){0});
+    loss = tensor_cross_entropy(logit, label);
+    ensure(tensor_ndim(loss) == 0 && isclose(tensor_data(loss)[0], logf(3)));
+
+    // tensor_cross_entropy: batch of two, both correct with margin 2; loss = log(1 + e^{-2})
+    logit = tensor_from((int[]){2, 2}, 2, (float[]){2, 0, 0, 2});
+    label = tensor_from((int[]){2}, 1, (float[]){0, 1});
+    loss = tensor_cross_entropy(logit, label);
+    ensure(tensor_ndim(loss) == 0 && isclose(tensor_data(loss)[0], logf(1 + expf(-2))));
+
+    tensor_frame_end();
+}
+
 static void test_utility(void)
 {
     tensor_frame_begin();
@@ -1032,6 +1057,7 @@ int main(void)
     test_reduction();
     test_argreduction();
     test_processing();
+    test_loss();
     test_utility();
     test_autograd();
     test_io();

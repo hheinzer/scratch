@@ -95,7 +95,11 @@ void tensor_argmax(const Tensor *src, long *index, int axis);
 // processing
 
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs);  // supports batched with broadcasting
-Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *target);
+
+// loss
+
+Tensor *tensor_mse(const Tensor *pred, const Tensor *target);
+Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *label);
 
 // utility
 

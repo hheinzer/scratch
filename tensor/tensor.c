@@ -2192,18 +2192,25 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
     return out;
 }
 
-Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *target)
+// loss
+
+Tensor *tensor_mse(const Tensor *pred, const Tensor *target)
 {
-    assert(logit && target && logit->ndim == 2 && target->ndim == 1);
+    return tensor_mean(tensor_square(tensor_sub(pred, target)), INT_MAX, 0);
+}
+
+Tensor *tensor_cross_entropy(const Tensor *logit, const Tensor *label)
+{
+    assert(logit && label && logit->ndim == 2 && label->ndim == 1);
     int batches = logit->shape[0];
     int classes = logit->shape[1];
-    assert(target->shape[0] == batches);
-    float (*data)[classes] = stack_calloc(batches, sizeof(*data));
-    const float *labels = target->data;
+    assert(label->shape[0] == batches);
+    float (*buf)[classes] = stack_calloc(batches, sizeof(*buf));
+    const float *idx = label->data;
     for (int i = 0; i < batches; i++) {
-        data[i][(int)labels[i * target->stride[0]]] = 1;
+        buf[i][(int)idx[i * label->stride[0]]] = 1;
     }
-    Tensor *one_hot = tensor_wrap((int[]){batches, classes}, 2, *data);
+    Tensor *one_hot = tensor_wrap((int[]){batches, classes}, 2, *buf);
     Tensor *shifted = tensor_sub(logit, tensor_max(logit, 1, 1));
     Tensor *log_softmax = tensor_sub(shifted, tensor_log(tensor_sum(tensor_exp(shifted), 1, 1)));
     return tensor_neg(tensor_mean(tensor_sum(tensor_mul(one_hot, log_softmax), 1, 0), INT_MAX, 0));
