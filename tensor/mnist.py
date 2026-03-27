@@ -16,15 +16,15 @@ np.save("data/y_train.npy", y_train.float().numpy())
 np.save("data/X_test.npy", X_test.numpy())
 np.save("data/y_test.npy", y_test.float().numpy())
 
-W1 = (torch.randn(784, 128) * (2 / 784) ** 0.5).requires_grad_(True)
-b1 = torch.zeros(1, 128, requires_grad=True)
-W2 = (torch.randn(128, 10) * (1 / 128) ** 0.5).requires_grad_(True)
-b2 = torch.zeros(1, 10, requires_grad=True)
+Wc1 = (torch.randn(16, 1, 3, 3) * (2 / 9) ** 0.5).requires_grad_(True)
+bc1 = torch.zeros(16, requires_grad=True)
+Wc2 = (torch.randn(32, 16, 3, 3) * (2 / 144) ** 0.5).requires_grad_(True)
+bc2 = torch.zeros(32, requires_grad=True)
+W = (torch.randn(1568, 10) * (1 / 1568) ** 0.5).requires_grad_(True)
+b = torch.zeros(1, 10, requires_grad=True)
 
-vW1 = torch.zeros_like(W1)
-vb1 = torch.zeros_like(b1)
-vW2 = torch.zeros_like(W2)
-vb2 = torch.zeros_like(b2)
+params = [Wc1, bc1, Wc2, bc2, W, b]
+vels = [torch.zeros_like(p) for p in params]
 
 lr = 0.1
 batch_size = 128
@@ -33,7 +33,9 @@ epochs = 10
 
 
 def forward(X):
-    return torch.relu(X @ W1 + b1) @ W2 + b2
+    x = torch.relu(F.conv2d(X.reshape(-1, 1, 28, 28), Wc1, bc1, stride=2, padding=1))
+    x = torch.relu(F.conv2d(x, Wc2, bc2, stride=2, padding=1))
+    return x.flatten(1) @ W + b
 
 
 for epoch in range(epochs):
@@ -49,7 +51,7 @@ for epoch in range(epochs):
         loss.backward()
 
         with torch.no_grad():
-            for p, v in zip([W1, b1, W2, b2], [vW1, vb1, vW2, vb2]):
+            for p, v in zip(params, vels):
                 if p.grad is not None:
                     v.mul_(momentum).add_(p.grad)
                     p.sub_(lr * v)
