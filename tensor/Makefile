@@ -3,8 +3,8 @@ LDLIBS = -lm
 CFLAGS = -std=c99 -g3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion
 
 # use blas
-LDLIBS += $(shell pkg-config --libs openblas)
-CFLAGS += $(shell pkg-config --cflags openblas) -DUSE_BLAS=1
+LDLIBS += $(shell pkg-config --libs mkl-static-lp64-seq)
+CFLAGS += $(shell pkg-config --cflags mkl-static-lp64-seq) -DUSE_BLAS=1
 
 # debug
 #CFLAGS += -O0 -fno-omit-frame-pointer -fsanitize=address,undefined

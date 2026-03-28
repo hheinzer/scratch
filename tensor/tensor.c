@@ -10,16 +10,7 @@
 #include <string.h>
 
 #ifdef USE_BLAS
-#include <cblas.h>
-const char *__lsan_default_options(void)  // NOLINT(bugprone-reserved-identifier)
-{
-    return "print_suppressions=0";
-}
-const char *__lsan_default_suppressions(void)  // NOLINT(bugprone-reserved-identifier)
-{
-    // suppress openblas/openmp internal leak from cpu affinity detection at startup
-    return "leak:gotoblas_init\n";
-}
+#include <mkl_cblas.h>
 #endif
 
 // memory
@@ -2127,14 +2118,6 @@ static void matmul(float *out, long stride_out, const float *lhs, long stride_lh
 Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
 {
     assert(lhs && rhs && lhs->ndim >= 2 && rhs->ndim >= 2);
-
-#ifdef USE_BLAS
-    static int blas_init = 0;
-    if (!blas_init) {
-        openblas_set_num_threads(1);
-        blas_init = 1;
-    }
-#endif
 
     int rows = lhs->shape[lhs->ndim - 2];
     int cols = rhs->shape[rhs->ndim - 1];
