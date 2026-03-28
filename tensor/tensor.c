@@ -2100,21 +2100,24 @@ static const Tensor *matmul_prepare(const Tensor *src, long *stride, int *trans)
 }
 
 static void matmul(float *out, long stride_out, const float *lhs, long stride_lhs, const float *rhs,
-                   long stride_rhs, int rows, int cols, int inner, int trans_lhs, int trans_rhs)
+                   long stride_rhs, int rows, int cols, int inner, int trans_lhs, int trans_rhs,
+                   float alpha, float beta)
 {
 #ifdef USE_BLAS
     assert(stride_lhs <= INT_MAX && stride_rhs <= INT_MAX && stride_out <= INT_MAX);
     cblas_sgemm(CblasRowMajor, trans_lhs ? CblasTrans : CblasNoTrans,
-                trans_rhs ? CblasTrans : CblasNoTrans, rows, cols, inner, 1, lhs, (int)stride_lhs,
-                rhs, (int)stride_rhs, 0, out, (int)stride_out);
+                trans_rhs ? CblasTrans : CblasNoTrans, rows, cols, inner, alpha, lhs,
+                (int)stride_lhs, rhs, (int)stride_rhs, beta, out, (int)stride_out);
 #else
     for (int i = 0; i < rows; i++) {
-        memset(out + (i * stride_out), 0, cols * sizeof(*out));
+        for (int j = 0; j < cols; j++) {
+            out[(i * stride_out) + j] *= beta;
+        }
         for (int k = 0; k < inner; k++) {
             float val_lhs = !trans_lhs ? lhs[(i * stride_lhs) + k] : lhs[(k * stride_lhs) + i];
             for (int j = 0; j < cols; j++) {
                 float val_rhs = !trans_rhs ? rhs[(k * stride_rhs) + j] : rhs[(j * stride_rhs) + k];
-                out[(i * stride_out) + j] += val_lhs * val_rhs;
+                out[(i * stride_out) + j] += alpha * val_lhs * val_rhs;
             }
         }
     }
@@ -2198,7 +2201,7 @@ Tensor *tensor_matmul(const Tensor *lhs, const Tensor *rhs)
         const float *data_lhs = lhs->data + offset_lhs;
         const float *data_rhs = rhs->data + offset_rhs;
         matmul(data_out, stride_out, data_lhs, stride_lhs, data_rhs, stride_rhs, rows, cols, inner,
-               trans_lhs, trans_rhs);
+               trans_lhs, trans_rhs, 1, 0);
     }
 
     stack_restore();
@@ -2286,7 +2289,8 @@ static void conv2d_backward(Tensor *out)
             float *grad_out = grad + (k * c_out * cols);
             float *grad_src = src->grad + (k * c_src * h_src * w_src);
             // NOLINTNEXTLINE(readability-suspicious-call-argument)
-            matmul(grad_col, cols, weight->data, inner, grad_out, cols, inner, cols, c_out, 1, 0);
+            matmul(grad_col, cols, weight->data, inner, grad_out, cols, inner, cols, c_out, 1, 0, 1,
+                   0);
             col2img(grad_src, c_src, h_src, w_src, grad_col, h_wgt, w_wgt, h_out, w_out, stride,
                     padding);
         }
@@ -2296,17 +2300,13 @@ static void conv2d_backward(Tensor *out)
     if (weight->requires_grad) {
         ensure_grad(weight);
         float *col = stack_malloc((long)inner * cols, sizeof(*col));
-        float *grad_wgt = stack_malloc((long)c_out * inner, sizeof(*grad_wgt));
         for (long k = 0; k < batch; k++) {
             float *grad_out = grad + (k * c_out * cols);
             float *data_src = src->data + (k * c_src * h_src * w_src);
             img2col(col, h_wgt, w_wgt, h_out, w_out, data_src, c_src, h_src, w_src, stride,
                     padding);
             // NOLINTNEXTLINE(readability-suspicious-call-argument)
-            matmul(grad_wgt, inner, grad_out, cols, col, cols, c_out, inner, cols, 0, 1);
-            for (long i = 0; i < ((long)c_out * inner); i++) {
-                weight->grad[i] += grad_wgt[i];
-            }
+            matmul(weight->grad, inner, grad_out, cols, col, cols, c_out, inner, cols, 0, 1, 1, 1);
         }
         stack_restore();
     }
@@ -2367,7 +2367,7 @@ Tensor *tensor_conv2d(const Tensor *src, const Tensor *weight, const Tensor *bia
         float *data_src = src->data + (k * c_src * h_src * w_src);
         float *data_out = out->data + (k * c_out * h_out * w_out);
         img2col(col, h_wgt, w_wgt, h_out, w_out, data_src, c_src, h_src, w_src, stride, padding);
-        matmul(data_out, cols, weight->data, inner, col, cols, c_out, cols, inner, 0, 0);
+        matmul(data_out, cols, weight->data, inner, col, cols, c_out, cols, inner, 0, 0, 1, 0);
         if (bias) {
             for (int i = 0; i < c_out; i++) {
                 for (int j = 0; j < cols; j++) {
