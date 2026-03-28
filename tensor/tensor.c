@@ -2216,6 +2216,43 @@ static void img2col(float *col, int h_wgt, int w_wgt, int h_out, int w_out, cons
     }
 }
 
+static void matmul_batch(float *out, long stride_out, long stride_batch_out, const float *lhs,
+                         long stride_lhs, long stride_batch_lhs, const float *rhs, long stride_rhs,
+                         long stride_batch_rhs, int rows, int cols, int inner, int batch,
+                         int trans_lhs, int trans_rhs, float alpha, float beta)
+{
+#ifdef USE_BLAS
+    if (stride_batch_out == 0 || stride_batch_lhs == 0 || stride_batch_rhs == 0) {
+        float *arr_out[batch];
+        const float *arr_lhs[batch];
+        const float *arr_rhs[batch];
+        for (int k = 0; k < batch; k++) {
+            arr_out[k] = out + (k * stride_batch_out);
+            arr_lhs[k] = lhs + (k * stride_batch_lhs);
+            arr_rhs[k] = rhs + (k * stride_batch_rhs);
+        }
+        cblas_sgemm_batch(CblasRowMajor, &(CBLAS_TRANSPOSE){trans_lhs ? CblasTrans : CblasNoTrans},
+                          &(CBLAS_TRANSPOSE){trans_rhs ? CblasTrans : CblasNoTrans}, &(int){rows},
+                          &(int){cols}, &(int){inner}, &alpha, arr_lhs, &(int){(int)stride_lhs},
+                          arr_rhs, &(int){(int)stride_rhs}, &beta, arr_out, &(int){(int)stride_out},
+                          1, &(int){batch});
+    }
+    else {
+        cblas_sgemm_batch_strided(CblasRowMajor, trans_lhs ? CblasTrans : CblasNoTrans,
+                                  trans_rhs ? CblasTrans : CblasNoTrans, rows, cols, inner, alpha,
+                                  lhs, (int)stride_lhs, (int)stride_batch_lhs, rhs, (int)stride_rhs,
+                                  (int)stride_batch_rhs, beta, out, (int)stride_out,
+                                  (int)stride_batch_out, batch);
+    }
+#else
+    for (int k = 0; k < batch; k++) {
+        matmul(out + (k * stride_batch_out), stride_out, lhs + (k * stride_batch_lhs), stride_lhs,
+               rhs + (k * stride_batch_rhs), stride_rhs, rows, cols, inner, trans_lhs, trans_rhs,
+               alpha, beta);
+    }
+#endif
+}
+
 static void col2img(float *grad_src, int c_src, int h_src, int w_src, const float *grad_col,
                     int h_wgt, int w_wgt, int h_out, int w_out, int stride, int padding)
 {
@@ -2267,30 +2304,27 @@ static void conv2d_backward(Tensor *out)
 
     if (src->requires_grad) {
         ensure_grad(src);
-        float *grad_col = stack_malloc((long)inner * cols, sizeof(*grad_col));
+        float *grad_col = stack_malloc((long)batch * inner * cols, sizeof(*grad_col));
+        // NOLINTNEXTLINE(readability-suspicious-call-argument)
+        matmul_batch(grad_col, cols, (long)inner * cols, weight->data, inner, 0, grad, cols,
+                     (long)c_out * cols, inner, cols, c_out, batch, 1, 0, 1, 0);
         for (long k = 0; k < batch; k++) {
-            float *grad_out = grad + (k * c_out * cols);
-            float *grad_src = src->grad + (k * c_src * h_src * w_src);
-            // NOLINTNEXTLINE(readability-suspicious-call-argument)
-            matmul(grad_col, cols, weight->data, inner, grad_out, cols, inner, cols, c_out, 1, 0, 1,
-                   0);
-            col2img(grad_src, c_src, h_src, w_src, grad_col, h_wgt, w_wgt, h_out, w_out, stride,
-                    padding);
+            col2img(src->grad + (k * c_src * h_src * w_src), c_src, h_src, w_src,
+                    grad_col + (k * inner * cols), h_wgt, w_wgt, h_out, w_out, stride, padding);
         }
         stack_restore();
     }
 
     if (weight->requires_grad) {
         ensure_grad(weight);
-        float *col = stack_malloc((long)inner * cols, sizeof(*col));
+        float *col = stack_malloc((long)batch * inner * cols, sizeof(*col));
         for (long k = 0; k < batch; k++) {
-            float *grad_out = grad + (k * c_out * cols);
-            float *data_src = src->data + (k * c_src * h_src * w_src);
-            img2col(col, h_wgt, w_wgt, h_out, w_out, data_src, c_src, h_src, w_src, stride,
-                    padding);
-            // NOLINTNEXTLINE(readability-suspicious-call-argument)
-            matmul(weight->grad, inner, grad_out, cols, col, cols, c_out, inner, cols, 0, 1, 1, 1);
+            img2col(col + (k * inner * cols), h_wgt, w_wgt, h_out, w_out,
+                    src->data + (k * c_src * h_src * w_src), c_src, h_src, w_src, stride, padding);
         }
+        // NOLINTNEXTLINE(readability-suspicious-call-argument)
+        matmul_batch(weight->grad, inner, 0, grad, cols, (long)c_out * cols, col, cols,
+                     (long)inner * cols, c_out, inner, cols, batch, 0, 1, 1, 1);
         stack_restore();
     }
 
@@ -2344,14 +2378,18 @@ Tensor *tensor_conv2d(const Tensor *src, const Tensor *weight, const Tensor *bia
     int cols = h_out * w_out;
     int inner = c_src * h_wgt * w_wgt;
 
-    float *col = stack_malloc((long)inner * cols, sizeof(*col));
-
+    float *col = stack_malloc((long)batch * inner * cols, sizeof(*col));
     for (long k = 0; k < batch; k++) {
-        float *data_src = src->data + (k * c_src * h_src * w_src);
-        float *data_out = out->data + (k * c_out * h_out * w_out);
-        img2col(col, h_wgt, w_wgt, h_out, w_out, data_src, c_src, h_src, w_src, stride, padding);
-        matmul(data_out, cols, weight->data, inner, col, cols, c_out, cols, inner, 0, 0, 1, 0);
-        if (bias) {
+        img2col(col + (k * inner * cols), h_wgt, w_wgt, h_out, w_out,
+                src->data + (k * c_src * h_src * w_src), c_src, h_src, w_src, stride, padding);
+    }
+
+    matmul_batch(out->data, cols, (long)c_out * cols, weight->data, inner, 0, col, cols,
+                 (long)inner * cols, c_out, cols, inner, batch, 0, 0, 1, 0);
+
+    if (bias) {
+        for (long k = 0; k < batch; k++) {
+            float *data_out = out->data + (k * c_out * cols);
             for (int i = 0; i < c_out; i++) {
                 for (int j = 0; j < cols; j++) {
                     data_out[(i * cols) + j] += bias->data[(i * bias->stride[0])];
